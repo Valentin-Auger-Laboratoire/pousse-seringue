@@ -44,23 +44,41 @@ En CPGE TSI, j'ai étudié en TP la chaîne d'asservissement d'un pousse-seringu
 Le mode hybride fait mieux que le mode manuel quand le patient oublie un bolus ou mange sans le dire. L'après-midi de sport montre aussi l'inverse : avec la sensibilité qui augmente, la boucle provoque des hypoglycémies légères. Le simulateur le montre au lieu de le cacher.
 
 ### 3. Hémomixeur (don de sang)
-- **Débit du don** : pression veineuse sous garrot, hauteur de la poche sous le bras, aiguille 16 G et tubulure (Poiseuille), résistance de la veine. Un don de 450 mL dure environ 7 à 8 minutes.
-- **Plateau basculant** : il berce la poche pour mélanger le sang avec les 63 mL d'anticoagulant. La cellule de pesée ne voit qu'une partie du poids (facteur cos θ), et la rotation ajoute une petite force centripète.
-- **Quatre façons d'estimer la masse**, comparées dans un tableau :
+Un hémomixeur pèse la poche pendant le don, la berce pour mélanger le sang avec l'anticoagulant, et pince la tubulure au bon volume. J'en ai manipulé un en TP de CPGE ; le simulateur reprend sa logique (automate, moteurs, signaux de pesée) avec mes propres modèles.
 
-  | Méthode | Résultat |
+- **Automate à 7 états**, dessiné en graphe et suivi pendant l'animation, avec un journal horodaté :
+  E1 hors tension → E2 initialisation (pince ouverte, test du capteur) → E4 attente → E5 préparation et tare de la poche vide → E6 prélèvement → E7 fin (pince fermée) → E4 quand la poche est retirée. Depuis E2, E5 ou E6, un défaut mène à E3 (agitation arrêtée, pince fermée).
+- **Bielle d'agitation** : le moteur MA entraîne une manivelle, une bielle fait basculer le plateau. L'angle du plateau vient de la fermeture géométrique |AB| = L, résolue par la méthode de Newton. Avec une manivelle de 10 mm et une attache à 40 mm de l'axe, le plateau bascule de ±14,5°, et le mouvement n'est pas tout à fait sinusoïdal.
+- **Moteur d'agitation à courant continu** : la vitesse dépend de la tension, et le courant suit le couple ramené par le réducteur (inertie et poids de la poche). L'ondulation du courant grandit quand la poche se remplit ; une surintensité signale un plateau bloqué.
+- **Pince motorisée MC** avec un temps de course : plus elle est lente, plus il passe de sang après la décision.
+- **Chaîne de pesée** :
+  - cellule et conditionneur (S1 : 1,70 V + 2,65 mV/g, légèrement non linéaire) ;
+  - filtre RC analogique de 0,8 s (S2) ;
+  - conversion 12 bits à 40 Hz ;
+  - linéarisation (S3, étalonnage 3 points) ou étalonnage linéaire à 2 points ;
+  - tare de la poche vide.
+- **Débit du don** : pression veineuse sous garrot, hauteur de la poche, aiguille 16 G et tubulure (Poiseuille), résistance de la veine. Un don de 450 mL dure environ 7,5 minutes.
+- **Cinq façons d'estimer la masse**, comparées dans un tableau :
+
+  | Méthode | Résultat (cible 450 mL) |
   |---|---|
-  | Signal brut | La pince se ferme sur un pic |
-  | Moyenne sur une oscillation | Biais de +9 mL : la moyenne de cos(A·sin ωt) vaut J₀(A) |
-  | Correction par l'angle mesuré au codeur | Écart inférieur à 1 mL |
-  | Pesée au passage à l'horizontale | Écart inférieur à 1 mL |
+  | Signal brut S1 | La pince se ferme sur un pic : −1,4 mL |
+  | Filtre RC S2 | La moyenne de cos θ est inférieure à 1 : +7 mL |
+  | Moyenne sur une oscillation | Même biais : +9 mL |
+  | Correction par l'angle du codeur | +0,5 mL |
+  | Pesée au passage à l'horizontale | +0,4 mL |
 
-- Pince commandée au volume cible avec un temps de fermeture, et alarmes de débit faible et de don trop long.
+- **Défauts à provoquer** 2 minutes après le début :
+  - capteur débranché → E3 ;
+  - plateau bloqué (surintensité) → E3 ;
+  - veine bouchée (débit faible pendant 60 s) → E3 ;
+  - arrêt par l'opérateur → E7 avec une poche incomplète.
+- Graphiques : tensions S1 et S2 sur tout le don, zoom sur les 30 dernières secondes, courants des deux moteurs, débit.
 
 ### Fichiers
 | Fichier | Rôle |
 |---|---|
-| `dispositifs.js` | Moteur des trois simulations (testable avec Node) |
+| `dispositifs.js` | Moteur des simulations, dont l'automate de l'hémomixeur (testable avec Node) |
 | `index.html` | Interface, animations et graphiques, bilingue FR / EN |
 | `tests/test.js` | Tests |
 
@@ -68,7 +86,7 @@ Le mode hybride fait mieux que le mode manuel quand le patient oublie un bolus o
 ```bash
 node tests/test.js
 ```
-287 vérifications. Elles couvrent :
+328 vérifications. Elles couvrent :
 - **Pousse-seringue, chaîne** :
   - section πd²/4 et Q = S·v ;
   - vitesse du moteur, fréquence des pas, volume par pas ;
@@ -89,13 +107,15 @@ node tests/test.js
 - **Hémomixeur** :
   - J₀ comparé à des valeurs tabulées ;
   - débit plausible et décroissant ;
-  - volume à ±3 mL avec la correction par l'angle et avec la pesée à l'horizontale ;
-  - biais de la moyenne conforme à la théorie J₀ ;
-  - méthodes équivalentes sans agitation ;
-  - alarme si la veine est faible.
+  - bielle : fermeture |AB| = L à 10⁻¹² près sur un tour, amplitude proche de asin(r/b), mouvement périodique et non symétrique ;
+  - capteur : la linéarisation inverse exactement la caractéristique, l'étalonnage 2 points est faux entre ses points ;
+  - automate : séquence E1 → E2 → E4 → E5 → E6 → E7 → E4, tare juste à 1 g près, échantillons quantifiés sur 12 bits, S2 plus lisse que S1 ;
+  - volume à ±3 mL avec la correction par l'angle et avec la pesée à l'horizontale ; biais positif du filtre RC et de la moyenne ;
+  - courant d'agitation croissant avec la masse et sous le seuil ; surintensité si le plateau est bloqué ;
+  - chacun des 4 défauts mène au bon état, avec une poche incomplète et la pince fermée.
 
 ### Limites
-- Valeurs plausibles, pas celles d'un appareil précis. Le patient virtuel est un modèle simple, très loin des simulateurs validés utilisés pour homologuer les vraies boucles fermées.
+- Valeurs plausibles, pas celles d'un appareil précis. Les dimensions de la bielle, les constantes des moteurs et du capteur sont des choix réalistes, pas celles du banc de TP. Le patient virtuel est un modèle simple, très loin des simulateurs validés utilisés pour homologuer les vraies boucles fermées.
 - Le régulateur est un PID volontairement simple. Les vraies pompes utilisent des algorithmes plus élaborés (commande prédictive, logique floue), validés cliniquement.
 - **Outil pédagogique, pas un dispositif médical.**
 
@@ -123,21 +143,25 @@ In my CPGE (engineering preparatory class) lab sessions, I studied the control l
   - PID controller with insulin-on-board limit and predictive low-glucose suspend;
   - six day scenarios; time-in-range metrics.
 - **Blood mixer**:
+  - 7-state controller drawn as a graph and followed during the animation (power off, initialisation, waiting, tare, collection, end, fault), with a timestamped log;
+  - plate rocked by a crank and connecting rod (loop closure solved by Newton's method), DC rocking motor whose current follows the reflected torque (overcurrent = jammed plate), motorised clamp;
+  - weighing chain: conditioner S1, analogue RC filter S2, 12-bit ADC at 40 Hz, linearisation S3, tare;
+  - injectable faults: unplugged sensor, jammed plate, blocked vein, operator stop;
   - donor flow (tourniquet, bag height, 16 G needle, vein resistance);
   - rocking plate seen by the load cell through cos θ plus a centripetal term;
-  - four mass estimates compared: raw, one-period average (+9 mL bias equal to the J₀ effect), encoder-angle correction and level-crossing weighing (both under 1 mL);
-  - clamp control and alarms.
+  - five mass estimates compared: raw, RC filter and one-period average (+7 to +9 mL bias from the mean of cos θ), encoder-angle correction and level-crossing weighing (both under 1 mL).
 
 ### Tests
 ```bash
 node tests/test.js
 ```
-287 checks:
+328 checks:
 - chain formulas and Poiseuille;
 - occlusion delay C·P/Q, anti-bolus volume C·P;
 - steady-state concentration;
 - basal equilibrium; no severe hypoglycaemia; hybrid beating manual on the hard scenarios;
-- J₀ bias of the average, angle and level methods within ±3 mL.
+- J₀ bias of the average, angle and level methods within ±3 mL;
+- crank loop closure, sensor linearisation, controller state sequence, motor current, and the four faults ending in the right state.
 
 ### Limits
 - Plausible values, not a specific device. The virtual patient is far simpler than the validated simulators used to approve real closed loops, and the controller is a simple PID.

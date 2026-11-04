@@ -154,5 +154,62 @@ check('part d’anticoagulant 63/(63+V)', rel(res.angle.ratio, 100 * 63 / (63 + 
   check('alarme de débit faible ou de don trop long', r.alarms.length > 0, r.alarms);
 }
 
+// ---------- 5. Hémomixeur complet : bielle, chaîne de pesée, automate ----------
+{
+  const g = D.CRANK;
+  // fermeture géométrique |AB| = L vérifiée sur un tour
+  let th = 0, worst = 0;
+  for (let i = 0; i <= 360; i++) {
+    const phi = (i / 360) * 2 * Math.PI; th = D.crankTheta(g, phi, th);
+    const ax = g.b * Math.cos(th) - (g.b + g.r * Math.cos(phi)), ay = g.b * Math.sin(th) - (-g.L + g.r * Math.sin(phi));
+    worst = Math.max(worst, Math.abs(Math.hypot(ax, ay) - g.L));
+  }
+  check('bielle : |AB| = L', worst < 1e-12, worst);
+  check('bielle : amplitude ≈ asin(r/b)', near(D.crankRange(g).amp, Math.asin(g.r / g.b), 0.003), D.crankRange(g).amp);
+  check('bielle : mouvement non symétrique (obliquité)', Math.abs(D.crankRange(g).hi + D.crankRange(g).lo) > 1e-4);
+  check('amplitude croît avec r', D.crankRange({ ...g, r: 0.012 }).amp > D.crankRange({ ...g, r: 0.006 }).amp);
+  check('période : θ(φ + 2π) = θ(φ)', near(D.crankTheta(g, 1.3, 0), D.crankTheta(g, 1.3 + 2 * Math.PI, 0), 1e-12));
+  // capteur : étalonnage
+  for (const m of [0, 100, 250, 400, 600]) {
+    check('S3 inverse la caractéristique (' + m + ' g)', near(D.invLin3(D.sensorV(m)), m, 1e-9));
+  }
+  check('étalonnage 2 points exact en 0 et 500 g', near(D.invLinear(D.sensorV(0)), 0, 1e-9) && near(D.invLinear(D.sensorV(500)), 500, 1e-9));
+  check('étalonnage 2 points faux entre les points', Math.abs(D.invLinear(D.sensorV(250)) - 250) > 1);
+  check('pente 2,65 mV/g', near((D.sensorV(1) - D.sensorV(0)) * 1000, 2.65, 0.01));
+}
+const auto = { Pv: 50, h: 0.5, tubeL: 1.2, tubeD: 3, mu: 3.8e-3, target: 450, clampTime: 0.6 };
+const A = {};
+for (const m of ['raw', 'rc', 'avg', 'angle', 'level']) A[m] = D.simulateAutomate({ ...auto, method: m });
+{
+  const r = A.angle;
+  check('séquence E1→E2→E4→E5→E6→E7→E4', r.log.map((l) => l.to).join(',') === 'E2,E4,E5,E6,E7,E4', r.log.map((l) => l.to));
+  check('fin normale sur le volume', r.final === 'E7' && r.reason === 'target');
+  check('tare = poche + anticoagulant (±1 g)', near(r.tare, r.trueTare, 1), [r.tare, r.trueTare]);
+  check('angle : ±3 mL', near(A.angle.V, 450, 3), A.angle.V);
+  check('horizontale : ±3 mL', near(A.level.V, 450, 3), A.level.V);
+  check('filtre RC : biais positif', A.rc.V > 453, A.rc.V);
+  check('moyenne : biais positif', A.avg.V > 453, A.avg.V);
+  check('durée 6–10 min', r.duration / 60 > 6 && r.duration / 60 < 10, r.duration / 60);
+  check('pince fermée à la fin', r.clamp[r.clamp.length - 1] === 1);
+  check('échantillons CAN quantifiés (12 bits)', r.S1.every((v) => near(Math.round(v / (5 / 4096)) * (5 / 4096), v, 1e-9)));
+  check('S2 lisse S1', (() => { const d = (a) => a.slice(1).reduce((s, v, i) => s + Math.abs(v - a[i]), 0); return d(r.S2) < d(r.S1) / 3; })());
+  // le courant du moteur d'agitation augmente avec la masse de la poche
+  const i6 = r.t.map((x, i) => i).filter((i) => r.state[i] === 'E6');
+  const amp = (ids) => Math.max(...ids.map((i) => r.I[i])) - Math.min(...ids.map((i) => r.I[i]));
+  check('courant MA : ondulation croissante avec la masse', amp(i6.slice(-300)) > 1.5 * amp(i6.slice(20, 320)), [amp(i6.slice(20, 320)), amp(i6.slice(-300))]);
+  check('courant MA nominal < seuil', Math.max(...i6.map((i) => r.I[i])) < 150);
+}
+check('sans linéarisation : erreur plus grande', Math.abs(D.simulateAutomate({ ...auto, method: 'level', lin: false }).V - 450) > Math.abs(A.level.V - 450));
+// défauts injectés
+for (const [type, fin, why] of [['sensor', 'E3', 'sensor'], ['jam', 'E3', 'jam'], ['vein', 'E3', 'lowflow'], ['stop', 'E7', 'stop']]) {
+  const r = D.simulateAutomate({ ...auto, method: 'angle', fault: { type, t: 120 } });
+  check('défaut ' + type + ' → ' + fin, r.final === fin && r.reason === why, [r.final, r.reason]);
+  check('défaut ' + type + ' : poche incomplète', r.V < 400, r.V);
+  check('défaut ' + type + ' : pince fermée', r.clamp[r.clamp.length - 1] === 1);
+  if (type === 'jam') check('plateau bloqué : surintensité', Math.max(...r.I) > 150);
+}
+// pince plus lente : un peu plus de volume
+check('pince lente → volume plus grand', D.simulateAutomate({ ...auto, method: 'angle', clampTime: 2 }).V > A.angle.V);
+
 console.log(ok + ' réussis, ' + ko + ' échoués');
 process.exit(ko ? 1 : 0);

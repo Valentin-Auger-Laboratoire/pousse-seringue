@@ -78,8 +78,21 @@
     .note { font-size: 0.82rem; color: var(--dim); }
     .note p + p { margin-top: 6px; }
     .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; font: 0.78rem var(--mono); color: var(--dim); }
+    .scene.tall { height: 320px; }
+    .fsmwrap { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 16px; }
+    .fsm svg { width: 100%; height: auto; display: block; }
+    .fsm .ed path { stroke: #6c6c70; stroke-width: 1.3; fill: none; }
+    .fsm text { font: 10px var(--mono); fill: var(--dim); }
+    .fsm .st rect { fill: #121214; stroke: var(--border-hi); stroke-width: 1.2; }
+    .fsm .st .t1 { font: 600 12px var(--sans); fill: var(--text); }
+    .fsm .st .t2 { font: 9.5px var(--mono); fill: var(--muted); }
+    .fsm .st.on rect { stroke: var(--accent); stroke-width: 2.2; fill: #2a0c12; }
+    .fsm .st.fault.on rect { fill: #4a0d17; }
+    .log { list-style: none; display: grid; gap: 4px; font: 0.74rem var(--mono); }
+    .log li { display: grid; grid-template-columns: 4.5em 6em minmax(0, 1fr); gap: 6px; padding: 4px 0; border-bottom: 1px solid var(--border); color: var(--dim); }
+    .log li span:nth-child(2) { color: var(--text); }
     @media (max-width: 1000px) { .grid { grid-template-columns: minmax(0, 1fr); } .main-col { order: -1; } }
-    @media (max-width: 700px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .charts { grid-template-columns: minmax(0, 1fr); } }
+    @media (max-width: 700px) { .fsmwrap { grid-template-columns: minmax(0, 1fr); } .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .charts { grid-template-columns: minmax(0, 1fr); } }
   </style>
 </head>
 <body>
@@ -140,21 +153,28 @@
       <div class="stack main-col">
         <div class="panel">
           <dl class="kpis" id="kpiHemo"></dl>
-          <canvas class="scene" id="scHemo" aria-label="Hémomixeur"></canvas>
+          <canvas class="scene tall" id="scHemo" aria-label="Hémomixeur"></canvas>
           <div class="controls"><button type="button" class="btn" id="playHemo" data-t="replay">Rejouer le don</button><span id="hemoT"></span></div>
           <ul class="issues" id="issHemo"></ul>
         </div>
+        <div class="panel fsmwrap">
+          <div><h2 data-t="fsmT">Graphe d'états de l'automate</h2><div id="fsmHemo" class="fsm"></div></div>
+          <div><h2 data-t="logT">Journal</h2><ol class="log" id="logHemo"></ol></div>
+        </div>
         <div class="panel charts">
-          <div class="chart"><p><span><i style="background:#6c6c70"></i><span data-t="lgRaw">cellule de pesée (brut)</span></span><span><i style="background:var(--accent)"></i><span data-t="lgEst">masse estimée</span></span><span><i style="background:var(--line)"></i><span data-t="lgTrue">masse vraie</span></span> · <span data-t="lgEnd">30 dernières secondes</span></p><canvas id="chM"></canvas></div>
+          <div class="chart"><p><span><i style="background:#6c6c70"></i><span data-t="lgS1">S1 conditionneur</span></span><span><i style="background:var(--accent)"></i><span data-t="lgS2">S2 filtre RC</span></span><span data-t="lgAcq">tension de pesée (V), CAN 12 bits à 40 Hz</span></p><canvas id="chAcq"></canvas></div>
+          <div class="chart"><p><span><i style="background:var(--accent)"></i><span data-t="lgEstV">volume estimé</span></span><span><i style="background:var(--line)"></i><span data-t="lgTrueV">volume vrai</span></span><span data-t="lgZoom">30 s avant la fermeture (mL)</span></p><canvas id="chZoom"></canvas></div>
+          <div class="chart"><p><span><i style="background:var(--warn)"></i><span data-t="lgIMA">moteur d’agitation MA</span></span><span><i style="background:var(--accent)"></i><span data-t="lgIMC">moteur de pince MC</span></span><span data-t="lgCur">(mA)</span></p><canvas id="chCur"></canvas></div>
           <div class="chart"><p><span><i style="background:var(--warn)"></i><span data-t="lgFlow">débit du don (mL/min)</span></span></p><canvas id="chFlow"></canvas></div>
         </div>
-        <div class="panel"><h2 data-t="hcmpT">Les quatre façons d'estimer la masse</h2><div class="tablewrap"><table id="cmpHemo"></table></div><p class="hint" data-t="hcmpHint">Quand le plateau penche, la cellule ne voit qu'une partie du poids (facteur cos θ), et la rotation ajoute une petite force. La moyenne sur une oscillation lisse le signal mais garde un biais : la moyenne de cos(A·sin ωt) vaut J₀(A), un peu moins que 1. Corriger avec l'angle mesuré par le codeur, ou peser au passage à l'horizontale, supprime ce biais.</p></div>
+        <div class="panel"><h2 data-t="hcmpT">Cinq façons d'estimer la masse</h2><div class="tablewrap"><table id="cmpHemo"></table></div><p class="hint" data-t="hcmpHint"></p></div>
       </div>
     </section>
 
     <div class="panel note" style="margin-top:20px">
       <p data-t="note1">Pousse-seringue : débit Q = S·v (S section de la seringue, v vitesse du piston) ; v = pas de la vis × vitesse de la vis ; pertes de charge par la loi de Poiseuille (8μL/πr⁴) dans le cathéter et la tubulure. La seringue et la ligne sont élastiques (compliance C) : en cas d'occlusion, la pression monte de Q/C par seconde, l'alarme met donc C·P/Q à se déclencher, et le volume stocké C·P part d'un coup au débouchage si l'appareil ne recule pas (« anti-bolus »). Concentration dans le sang : modèle à un compartiment, dC/dt = débit·c/Vd − k·C.</p>
-      <p data-t="note2">Pompe à insuline : modèle minimal de Bergman pour un patient de type 1 (action de l'insuline à distance), absorption sous-cutanée de l'insuline et digestion des glucides à deux compartiments, capteur continu avec 10 min de retard et du bruit, pompe qui délivre par impulsions de 0,05 U. Boucle fermée : PID sur la glycémie du capteur, limite d'insuline active et suspension prédictive avant l'hypoglycémie ; mode hybride = boucle fermée + bolus annoncés aux repas. Hémomixeur : débit du don par la loi de Poiseuille (aiguille 16 G, tubulure, veine sous garrot, poche plus bas que le bras), poche de 63 mL d'anticoagulant, sang à 1,053 g/mL, plateau basculant de pivot à 6 cm de la poche.</p>
+      <p data-t="note2">Pompe à insuline : modèle minimal de Bergman pour un patient de type 1 (action de l'insuline à distance), absorption sous-cutanée de l'insuline et digestion des glucides à deux compartiments, capteur continu avec 10 min de retard et du bruit, pompe qui délivre par impulsions de 0,05 U. Boucle fermée : PID sur la glycémie du capteur, limite d'insuline active et suspension prédictive avant l'hypoglycémie ; mode hybride = boucle fermée + bolus annoncés aux repas.</p>
+      <p data-t="note3"></p>
     </div>
   </div>
 
@@ -176,7 +196,7 @@
         lgRaw: 'cellule de pesée (brut)', lgEst: 'masse estimée', lgTrue: 'masse vraie', lgEnd: '30 dernières secondes', lgFlow: 'débit du don (mL/min)', replay: 'Rejouer le don',
         hcmpT: "Les quatre façons d'estimer la masse", hcmpHint: "Quand le plateau penche, la cellule ne voit qu'une partie du poids (facteur cos θ), et la rotation ajoute une petite force. La moyenne sur une oscillation lisse le signal mais garde un biais : la moyenne de cos(A·sin ωt) vaut J₀(A), un peu moins que 1. Corriger avec l'angle mesuré par le codeur, ou peser au passage à l'horizontale, supprime ce biais.",
         note1: "Pousse-seringue : débit Q = S·v (S section de la seringue, v vitesse du piston) ; v = pas de la vis × vitesse de la vis ; pertes de charge par la loi de Poiseuille (8μL/πr⁴) dans le cathéter et la tubulure. La seringue et la ligne sont élastiques (compliance C) : en cas d'occlusion, la pression monte de Q/C par seconde, l'alarme met donc C·P/Q à se déclencher, et le volume stocké C·P part d'un coup au débouchage si l'appareil ne recule pas (« anti-bolus »). Concentration dans le sang : modèle à un compartiment, dC/dt = débit·c/Vd − k·C.",
-        note2: "Pompe à insuline : modèle minimal de Bergman pour un patient de type 1 (action de l'insuline à distance), absorption sous-cutanée de l'insuline et digestion des glucides à deux compartiments, capteur continu avec 10 min de retard et du bruit, pompe qui délivre par impulsions de 0,05 U. Boucle fermée : PID sur la glycémie du capteur, limite d'insuline active et suspension prédictive avant l'hypoglycémie ; mode hybride = boucle fermée + bolus annoncés aux repas. Hémomixeur : débit du don par la loi de Poiseuille (aiguille 16 G, tubulure, veine sous garrot, poche plus bas que le bras), poche de 63 mL d'anticoagulant, sang à 1,053 g/mL, plateau basculant de pivot à 6 cm de la poche.",
+        note2: "Pompe à insuline : modèle minimal de Bergman pour un patient de type 1 (action de l'insuline à distance), absorption sous-cutanée de l'insuline et digestion des glucides à deux compartiments, capteur continu avec 10 min de retard et du bruit, pompe qui délivre par impulsions de 0,05 U. Boucle fermée : PID sur la glycémie du capteur, limite d'insuline active et suspension prédictive avant l'hypoglycémie ; mode hybride = boucle fermée + bolus annoncés aux repas.",
         // pousse-seringue
         syrT: 'Seringue et ligne', syr: 'Seringue', needle: 'Cathéter', Q: 'Débit prescrit', drive: 'Motorisation', stepper: 'Pas à pas (boucle ouverte)', dc: 'Courant continu asservi',
         mechT: 'Mécanique', pitch: 'Pas de la vis', ratio: 'Réducteur', micro: 'Micro-pas', slack: 'Jeu au démarrage',
@@ -215,7 +235,7 @@
         lgRaw: 'load cell (raw)', lgEst: 'estimated mass', lgTrue: 'true mass', lgEnd: 'last 30 seconds', lgFlow: 'donation flow (mL/min)', replay: 'Replay the donation',
         hcmpT: 'The four ways to estimate the mass', hcmpHint: 'When the plate tilts, the load cell only sees part of the weight (cos θ factor), and rotation adds a small force. Averaging over one oscillation smooths the signal but keeps a bias: the mean of cos(A·sin ωt) is J₀(A), slightly below 1. Correcting with the encoder angle, or weighing when the plate is level, removes this bias.',
         note1: 'Syringe pump: flow Q = S·v (S syringe cross-section, v plunger speed); v = screw pitch × screw speed; pressure drops by Poiseuille (8μL/πr⁴) in the catheter and tubing. The syringe and line are elastic (compliance C): during an occlusion, pressure rises by Q/C per second, so the alarm takes C·P/Q to trigger, and the stored volume C·P is released at once when cleared unless the device backs off ("anti-bolus"). Blood concentration: one-compartment model, dC/dt = flow·c/Vd − k·C.',
-        note2: 'Insulin pump: Bergman minimal model for a type 1 patient (remote insulin action), two-compartment subcutaneous insulin absorption and carbohydrate digestion, continuous sensor with 10 min delay and noise, pump delivering 0.05 U pulses. Closed loop: PID on sensor glucose, insulin-on-board limit and predictive suspension before hypoglycaemia; hybrid mode = closed loop + meal boluses. Blood mixer: donation flow by Poiseuille (16 G needle, tubing, vein under cuff, bag below the arm), bag with 63 mL anticoagulant, blood 1.053 g/mL, rocking plate pivoting 6 cm from the bag.',
+        note2: 'Insulin pump: Bergman minimal model for a type 1 patient (remote insulin action), two-compartment subcutaneous insulin absorption and carbohydrate digestion, continuous sensor with 10 min delay and noise, pump delivering 0.05 U pulses. Closed loop: PID on sensor glucose, insulin-on-board limit and predictive suspension before hypoglycaemia; hybrid mode = closed loop + meal boluses.',
         syrT: 'Syringe and line', syr: 'Syringe', needle: 'Catheter', Q: 'Prescribed flow', drive: 'Drive', stepper: 'Stepper (open loop)', dc: 'Servo DC motor',
         mechT: 'Mechanics', pitch: 'Screw pitch', ratio: 'Gear ratio', micro: 'Microsteps', slack: 'Start-up slack',
         safeT: 'Safety', alarmP: 'Occlusion alarm threshold', occl: 'Occlusion (clamped tubing) at 30 min, for 40 min', anti: 'Anti-bolus (plunger backs off at alarm)', bolus: '2 mL bolus at 1 h',
@@ -443,83 +463,183 @@
     }
 
     // =========================== Hémomixeur ===========================
-    const H = { target: 450, method: 'angle', amp: 15, freq: 0.5, Pv: 50, h: 0.5, clamp: 0.3 };
-    let hemo = null, hemoAll = null, hemoT0 = null, hemoRaf = null;
-    const hemoP = (m) => ({ Pv: H.Pv, h: H.h, tubeL: 1.2, tubeD: 3, mu: 3.8e-3, target: H.target, amp: H.amp, freq: H.freq, arm: 0.06, clampDelay: H.clamp, noise: 0.5, method: m || H.method });
+    Object.assign(T.fr, {
+      hemoT: 'Don de sang', targetV: 'Volume à prélever', method: 'Estimation de la masse',
+      meth: { raw: 'Signal brut (S1)', rc: 'Filtre RC analogique (S2)', avg: 'Moyenne sur une oscillation', angle: 'Correction par l’angle (codeur)', level: 'Pesée à l’horizontale' },
+      rockT: 'Agitation : bielle-manivelle', crankR: 'Rayon de la manivelle', motU: 'Tension du moteur d’agitation', donorT: 'Donneur et ligne', Pv: 'Pression veineuse (garrot)', h: 'Poche sous le bras',
+      chainT: 'Pesée et pince', clampT: 'Course de la pince motorisée', linCk: 'Linéarisation du capteur (S3, 3 points)', faultT: 'Défaut à provoquer (2 min après le début)',
+      fault: { none: 'Aucun', sensor: 'Capteur débranché', jam: 'Plateau bloqué', vein: 'Veine bouchée', stop: 'Arrêt opérateur' },
+      kVol: 'Volume prélevé', kErr: 'Écart à la cible', kDur: 'Durée du prélèvement', kRatio: 'Part d’anticoagulant', kAmp: 'Basculement', kFreq: 'Agitation', kTare: 'Tare (poche vide)', kState: 'État final',
+      hcmpT: "Cinq façons d'estimer la masse", hcmpHead: ['Méthode', 'Volume final', 'Écart', 'Durée', 'Fin'],
+      hcmpHint: "Quand le plateau penche, la cellule ne voit qu'une partie du poids (facteur cos θ) et la rotation ajoute une petite force centripète. Le filtre RC (S2) et la moyenne lissent le signal mais gardent un biais : la moyenne de cos θ est inférieure à 1 (≈ J₀(A) pour un mouvement sinusoïdal). Avec la bielle, le mouvement n'est pas tout à fait sinusoïdal. Corriger avec l'angle du codeur, ou peser au passage à l'horizontale, supprime ce biais.",
+      fsmT: "Graphe d'états de l'automate", logT: 'Journal',
+      st: { E1: 'Hors tension', E2: 'Initialisation', E3: 'En défaut', E4: 'Attente', E5: 'Préparation, tare', E6: 'Prélèvement', E7: 'Fin de prélèvement' },
+      stSub: { E1: '', E2: 'pince ouverte, test du capteur', E3: 'agitation 0, pince fermée', E4: 'agitation 0', E5: 'poche vide posée, tare sur 2 s', E6: 'agitation, pesée, surveillance', E7: 'pince fermée, agitation 0' },
+      why: { tension: 'tension OK', init: 'capteur OK, pince en haut', start: 'bouton Lancer', tare: 'tare stable', target: 'volume atteint', stop: 'bouton Arrêt', sensor: 'capteur hors plage', jam: 'surintensité moteur', lowflow: 'débit trop faible', remove: 'poche retirée' },
+      lgS1: 'S1 conditionneur', lgS2: 'S2 filtre RC', lgAcq: 'tension de pesée (V), CAN 12 bits à 40 Hz', lgEstV: 'volume estimé', lgTrueV: 'volume vrai', lgZoom: '30 s avant la fermeture (mL)',
+      lgIMA: 'moteur d’agitation MA', lgIMC: 'moteur de pince MC', lgCur: '(mA)', lgFlow: 'débit du don (mL/min)', replay: 'Rejouer le don',
+      iSensor: 'Capteur de pesée hors plage (S1 ≈ 0 V) : l’automate passe en défaut E3, ferme la pince et arrête l’agitation.', iJam: 'Courant du moteur d’agitation au-dessus de 150 mA pendant 0,5 s : plateau bloqué, passage en défaut E3.',
+      iLowF: 'Débit estimé sous 10 mL/min pendant 60 s : passage en défaut E3, la pince se ferme. Poche incomplète.', iStop: (v) => 'Arrêt par l’opérateur : poche incomplète (' + v + ' mL).',
+      iLong: 'Prélèvement de plus de 15 minutes : risque de caillots, la poche ne servira pas pour les plaquettes.', iOut: 'Volume hors de la tolérance de ±10 %.',
+      iRaw: 'Signal brut : la pince se ferme sur un pic d’oscillation, trop tôt.', iBias: 'Filtre ou moyenne : la masse est sous-estimée pendant l’agitation, la poche est trop remplie.', iNoLin: 'Sans linéarisation, la caractéristique du capteur (légèrement courbe) fausse la pesée de quelques grammes.',
+      iOk: 'Volume dans la tolérance, mélange correct.',
+      note3: "Hémomixeur : débit du don par la loi de Poiseuille (aiguille 16 G, tubulure, veine sous garrot, poche sous le bras), 63 mL d'anticoagulant, sang à 1,053 g/mL. Le plateau est basculé par une bielle-manivelle (manivelle de rayon r, bielle de 60 mm, attache à 40 mm de l'axe) : l'angle vient de la fermeture géométrique |AB| = L, résolue par la méthode de Newton. Moteur d'agitation à courant continu : son courant suit le couple ramené par le réducteur, ce qui permet de détecter un plateau bloqué. Chaîne de pesée : cellule, conditionneur (S1 : 1,70 V + 2,65 mV/g, légèrement non linéaire), filtre RC de 0,8 s (S2), CAN 12 bits à 40 Hz, linéarisation (S3). L'automate à 7 états est évalué à chaque échantillon. Valeurs plausibles, pas celles d'un appareil réel.",
+    });
+    Object.assign(T.en, {
+      hemoT: 'Blood donation', targetV: 'Volume to collect', method: 'Mass estimation',
+      meth: { raw: 'Raw signal (S1)', rc: 'Analogue RC filter (S2)', avg: 'Average over one oscillation', angle: 'Angle correction (encoder)', level: 'Weighing when level' },
+      rockT: 'Rocking: crank and connecting rod', crankR: 'Crank radius', motU: 'Rocking motor voltage', donorT: 'Donor and line', Pv: 'Venous pressure (cuff)', h: 'Bag below the arm',
+      chainT: 'Weighing and clamp', clampT: 'Motorised clamp travel', linCk: 'Sensor linearisation (S3, 3 points)', faultT: 'Fault to inject (2 min after start)',
+      fault: { none: 'None', sensor: 'Sensor unplugged', jam: 'Plate jammed', vein: 'Blocked vein', stop: 'Operator stop' },
+      kVol: 'Volume collected', kErr: 'Difference from target', kDur: 'Collection time', kRatio: 'Anticoagulant share', kAmp: 'Tilt', kFreq: 'Rocking', kTare: 'Tare (empty bag)', kState: 'Final state',
+      hcmpT: 'Five ways to estimate the mass', hcmpHead: ['Method', 'Final volume', 'Difference', 'Time', 'End'],
+      hcmpHint: 'When the plate tilts, the load cell only sees part of the weight (cos θ factor) and rotation adds a small centripetal force. The RC filter (S2) and the average smooth the signal but keep a bias: the mean of cos θ is below 1 (≈ J₀(A) for a sinusoidal motion). With the crank, the motion is not quite sinusoidal. Correcting with the encoder angle, or weighing when level, removes the bias.',
+      fsmT: 'Controller state graph', logT: 'Log',
+      st: { E1: 'Power off', E2: 'Initialisation', E3: 'Fault', E4: 'Waiting', E5: 'Preparation, tare', E6: 'Collection', E7: 'End of collection' },
+      stSub: { E1: '', E2: 'clamp open, sensor test', E3: 'rocking 0, clamp closed', E4: 'rocking 0', E5: 'empty bag on plate, 2 s tare', E6: 'rocking, weighing, monitoring', E7: 'clamp closed, rocking 0' },
+      why: { tension: 'power OK', init: 'sensor OK, clamp up', start: 'Start button', tare: 'tare stable', target: 'volume reached', stop: 'Stop button', sensor: 'sensor out of range', jam: 'motor overcurrent', lowflow: 'flow too low', remove: 'bag removed' },
+      lgS1: 'S1 conditioner', lgS2: 'S2 RC filter', lgAcq: 'weighing voltage (V), 12-bit ADC at 40 Hz', lgEstV: 'estimated volume', lgTrueV: 'true volume', lgZoom: '30 s before closing (mL)',
+      lgIMA: 'rocking motor MA', lgIMC: 'clamp motor MC', lgCur: '(mA)', lgFlow: 'donation flow (mL/min)', replay: 'Replay the donation',
+      iSensor: 'Load cell out of range (S1 ≈ 0 V): the controller goes to fault E3, closes the clamp and stops rocking.', iJam: 'Rocking motor current above 150 mA for 0.5 s: plate jammed, fault E3.',
+      iLowF: 'Estimated flow below 10 mL/min for 60 s: fault E3, the clamp closes. Incomplete bag.', iStop: (v) => 'Stopped by the operator: incomplete bag (' + v + ' mL).',
+      iLong: 'Collection longer than 15 minutes: clotting risk, the bag cannot be used for platelets.', iOut: 'Volume outside the ±10 % tolerance.',
+      iRaw: 'Raw signal: the clamp closes on an oscillation peak, too early.', iBias: 'Filter or average: the mass is underestimated while rocking, the bag is overfilled.', iNoLin: 'Without linearisation, the slightly curved sensor characteristic shifts the weighing by a few grams.',
+      iOk: 'Volume within tolerance, mixing correct.',
+      note3: "Blood mixer: donation flow by Poiseuille's law (16 G needle, tubing, vein under the cuff, bag below the arm), 63 mL of anticoagulant, blood at 1.053 g/mL. The plate is rocked by a crank and connecting rod (crank radius r, 60 mm rod, attached 40 mm from the axis): the angle comes from the loop closure |AB| = L, solved by Newton's method. DC rocking motor: its current follows the torque reflected through the gearbox, which makes a jammed plate detectable. Weighing chain: load cell, conditioner (S1: 1.70 V + 2.65 mV/g, slightly non-linear), 0.8 s RC filter (S2), 12-bit ADC at 40 Hz, linearisation (S3). The 7-state controller is evaluated at every sample. Plausible values, not those of a real device.",
+    });
+    const H = { target: 450, method: 'angle', r: 10, U: 7.85, Pv: 50, h: 0.5, clamp: 0.6, lin: true, fault: 'none' };
+    let hemo = null, hemoT0 = null, hemoRaf = null;
+    const hemoP = (m) => ({ Pv: H.Pv, h: H.h, tubeL: 1.2, tubeD: 3, mu: 3.8e-3, target: H.target, r: H.r / 1000, U: H.U, clampTime: H.clamp, lin: H.lin, method: m || H.method, fault: H.fault === 'none' ? null : { type: H.fault, t: 120 } });
+    const geo = () => ({ r: H.r / 1000, L: D.CRANK.L, b: D.CRANK.b });
     function renderHemoCtl() {
       const box = $('ctlHemo'); box.innerHTML = ''; head(box, t('hemoT'), true);
       lab(box, t('targetV')); segBtns(box, H, 'target', [[400, '400 mL'], [450, '450 mL'], [500, '500 mL']], () => { H.target = +H.target; runHemo(); });
       lab(box, t('method')); segBtns(box, H, 'method', Object.entries(T[lang].meth), runHemo);
       head(box, t('rockT'));
-      slider(box, H, 'amp', t('amp'), 0, 25, 1, (v) => '± ' + v + '°', runHemo);
-      slider(box, H, 'freq', t('freq'), 0.2, 1.2, 0.05, (v) => fmt(v, 2) + ' Hz', runHemo);
+      slider(box, H, 'r', t('crankR'), 4, 14, 0.5, (v) => fmt(v, 1) + ' mm · ± ' + fmt((D.crankRange(geo()).amp * 180) / Math.PI, 1) + '°', runHemo, false);
+      slider(box, H, 'U', t('motU'), 4, 12, 0.05, (v) => fmt(v, 2) + ' V', runHemo);
+      head(box, t('chainT'));
+      slider(box, H, 'clamp', t('clampT'), 0.2, 2, 0.1, (v) => fmt(v, 1) + ' s', runHemo);
+      check(box, H, 'lin', t('linCk'), runHemo);
       head(box, t('donorT'));
       slider(box, H, 'Pv', t('Pv'), 20, 70, 5, (v) => v + ' mmHg', runHemo);
       slider(box, H, 'h', t('h'), 0.1, 0.9, 0.05, (v) => fmt(v * 100, 0) + ' cm', runHemo);
-      slider(box, H, 'clamp', t('clamp'), 0, 2, 0.1, (v) => fmt(v, 1) + ' s', runHemo);
+      head(box, t('faultT')); segBtns(box, H, 'fault', Object.entries(T[lang].fault), runHemo);
+      // le libellé du rayon affiche l'amplitude obtenue : on le met à jour en direct
+      const rr = $('s-r'); if (rr) rr.addEventListener('input', () => { rr.parentNode.querySelector('output').textContent = fmt(H.r, 1) + ' mm · ± ' + fmt((D.crankRange(geo()).amp * 180) / Math.PI, 1) + '°'; });
     }
     function runHemo() {
-      hemo = D.simulateDonation(hemoP());
-      hemoAll = Object.keys(T.fr.meth).map((k) => [k, k === H.method ? hemo : D.simulateDonation(hemoP(k))]);
-      const err = hemo.V - H.target;
-      const meanQ = hemo.duration ? hemo.V / (hemo.duration / 60) : 0;
-      $('kpiHemo').innerHTML = kpi(t('kVol'), fmt(hemo.V, 1), 'mL', 'main') + kpi(t('kErr'), (err > 0 ? '+' : '') + fmt(err, 1), 'mL', Math.abs(err) > H.target * 0.1 ? 'bad' : Math.abs(err) < 3 ? 'good' : '') +
-        kpi(t('kDur'), hemo.duration ? fmt(hemo.duration / 60, 1) : '—', 'min', hemo.duration > 900 ? 'bad' : '') + kpi(t('kRatio'), fmt(hemo.ratio, 1), '%');
+      hemo = D.simulateAutomate(hemoP());
+      const all = Object.keys(T.fr.meth).map((k) => [k, k === H.method ? hemo : D.simulateAutomate(hemoP(k))]);
+      const err = hemo.V - H.target, ok = hemo.final === 'E7' && hemo.reason === 'target';
+      const fN = 0.0645 * (H.U - 20 * 0.005);
+      $('kpiHemo').innerHTML = kpi(t('kVol'), fmt(hemo.V, 1), 'mL', 'main') + kpi(t('kErr'), (err > 0 ? '+' : '') + fmt(err, 1), 'mL', !ok || Math.abs(err) > H.target * 0.1 ? 'bad' : Math.abs(err) < 3 ? 'good' : '') +
+        kpi(t('kDur'), hemo.duration ? fmt(hemo.duration / 60, 1) : '—', 'min', hemo.duration > 900 ? 'bad' : '') + kpi(t('kRatio'), fmt(hemo.ratio, 1), '%') +
+        kpi(t('kAmp'), '± ' + fmt((hemo.amp * 180) / Math.PI, 1), '°') + kpi(t('kFreq'), fmt(fN, 2), 'Hz') + kpi(t('kTare'), hemo.tare ? fmt(hemo.tare, 1) : '—', 'g') + kpi(t('kState'), hemo.final + ' ' + T[lang].st[hemo.final], '', hemo.final === 'E3' ? 'bad' : '');
       const L = [];
-      if (hemo.alarms.some((a) => a.type === 'lowflow')) L.push(['err', t('iLowF')]);
+      if (hemo.reason === 'sensor') L.push(['err', t('iSensor')]);
+      if (hemo.reason === 'jam') L.push(['err', t('iJam')]);
+      if (hemo.reason === 'lowflow') L.push(['err', t('iLowF')]);
+      if (hemo.reason === 'stop') L.push(['warn', t('iStop')(fmt(hemo.V, 0))]);
       if (hemo.alarms.some((a) => a.type === 'long')) L.push(['err', t('iLong')]);
-      if (Math.abs(err) > H.target * 0.1) L.push(['err', t('iOut')]);
-      if (H.method === 'raw' && H.amp > 3) L.push(['warn', t('iRaw')]);
-      if (H.method === 'avg' && H.amp > 3) L.push(['warn', t('iAvg')]);
-      if (!L.length) L.push(['good', t('iGoodH')]);
+      if (ok && Math.abs(err) > H.target * 0.1) L.push(['err', t('iOut')]);
+      if (ok && H.method === 'raw') L.push(['warn', t('iRaw')]);
+      if (ok && (H.method === 'rc' || H.method === 'avg')) L.push(['warn', t('iBias')]);
+      if (ok && !H.lin) L.push(['warn', t('iNoLin')]);
+      if (!L.length && ok) L.push(['good', t('iOk')]);
       issues($('issHemo'), L);
-      const n = hemo.t.length, end = hemo.t[n - 1], from = hemo.t.findIndex((x) => x >= end - 30);
-      const sl = (arr) => arr.slice(from).map((v, i) => [hemo.t[from + i], v]);
-      plot($('chM'), [{ pts: sl(hemo.raw), color: C.grey, width: 1 }, { pts: sl(hemo.truth), color: C.line, width: 1.4, dash: [4, 3] }, { pts: sl(hemo.est), color: C.accent, width: 1.8 }], { xmin: end - 30, xmax: end, xstep: 5, xfmt: (v) => Math.floor(v / 60) + ':' + String(Math.round(v % 60)).padStart(2, '0'), hlines: [{ y: hemo.targetMass, color: '#8a8a90' }] });
-      plot($('chFlow'), [{ pts: hemo.t.filter((_, i) => i % 20 === 0).map((x, i) => [x / 60, hemo.Q[i * 20]]), color: C.warn }], { xmin: 0, xmax: Math.max(1, end / 60), xfmt: (v) => fmt(v, 0) + ' min', ymin: 0, hlines: [{ y: 20, color: C.accent }] });
+      // graphiques
+      const n = hemo.t.length, tm = (i) => hemo.t[i] / 60, step = (k) => hemo.t.map((x, i) => [x / 60, k[i]]).filter((_, i) => i % 2 === 0);
+      plot($('chAcq'), [{ pts: step(hemo.S1), color: C.grey, width: 1 }, { pts: step(hemo.S2), color: C.accent, width: 1.6 }], { xmin: 0, xmax: tm(n - 1), xfmt: (v) => fmt(v, 0) + ' min' });
+      const end = hemo.tEnd || hemo.t[n - 1], from = hemo.t.findIndex((x) => x >= end - 30), to = Math.min(n, hemo.t.findIndex((x) => x >= end + 3) + 1 || n);
+      const sl = (arr) => arr.slice(from, to).map((v, i) => [hemo.t[from + i], v]);
+      plot($('chZoom'), [{ pts: sl(hemo.vol), color: C.line, width: 1.4, dash: [4, 3] }, { pts: sl(hemo.est), color: C.accent, width: 1.6 }], { xmin: end - 30, xmax: end + 3, xstep: 5, xfmt: (v) => Math.floor(v / 60) + ':' + String(Math.round(v % 60)).padStart(2, '0'), hlines: [{ y: H.target, color: '#8a8a90' }] });
+      plot($('chCur'), [{ pts: step(hemo.I), color: C.warn, width: 1 }, { pts: step(hemo.Ic), color: C.accent, width: 1.4 }], { xmin: 0, xmax: tm(n - 1), xfmt: (v) => fmt(v, 0) + ' min' });
+      plot($('chFlow'), [{ pts: step(hemo.Q), color: C.warn }], { xmin: 0, xmax: tm(n - 1), xfmt: (v) => fmt(v, 0) + ' min', ymin: 0, ymax: 80, hlines: [{ y: 10, color: '#8a3030' }] });
       const hh = t('hcmpHead');
       let tb = '<thead><tr>' + hh.map((c, i) => '<th' + (i ? ' class="n"' : '') + '>' + c + '</th>').join('') + '</tr></thead><tbody>';
-      hemoAll.forEach(([k, r]) => { const e = r.V - H.target; tb += '<tr' + (k === H.method ? ' class="sel"' : '') + '><td>' + T[lang].meth[k] + '</td><td class="n">' + fmt(r.V, 1) + ' mL</td><td class="n">' + (e > 0 ? '+' : '') + fmt(e, 1) + ' mL</td><td class="n">' + (r.duration ? fmt(r.duration / 60, 1) + ' min' : '—') + '</td></tr>'; });
+      all.forEach(([k, r]) => { const e = r.V - H.target; tb += '<tr' + (k === H.method ? ' class="sel"' : '') + '><td>' + T[lang].meth[k] + '</td><td class="n">' + fmt(r.V, 1) + ' mL</td><td class="n">' + (e > 0 ? '+' : '') + fmt(e, 1) + ' mL</td><td class="n">' + (r.duration ? fmt(r.duration / 60, 1) + ' min' : '—') + '</td><td class="n">' + r.final + '</td></tr>'; });
       $('cmpHemo').innerHTML = tb + '</tbody>';
+      $('logHemo').innerHTML = hemo.log.map((l) => '<li><span>' + fmt(l.t, 1) + ' s</span><span>' + l.from + ' → ' + l.to + '</span><span>' + T[lang].why[l.why] + '</span></li>').join('');
+      drawFSM(null);
       replayHemo();
     }
-    function replayHemo() { if (hemoRaf) cancelAnimationFrame(hemoRaf); hemoT0 = null; const tick = (ts) => { if (hemoT0 === null) hemoT0 = ts; drawHemo((ts - hemoT0) / 1000); hemoRaf = requestAnimationFrame(tick); }; hemoRaf = requestAnimationFrame(tick); }
+    // ---------- graphe d'états (dessiné en SVG) ----------
+    const FSM_POS = { E1: [40, 10], E2: [40, 78], E4: [40, 160], E5: [40, 232], E6: [40, 304], E7: [40, 376], E3: [300, 232] };
+    function drawFSM(cur) {
+      const W = 210, Hh = 50, S = T[lang].st, Sub = T[lang].stSub, box = (k) => FSM_POS[k];
+      const ar = (x1, y1, x2, y2, lbl, lx, ly, anchor) => '<path d="M' + x1 + ' ' + y1 + ' L' + x2 + ' ' + y2 + '" marker-end="url(#ah)"/>' + (lbl ? '<text x="' + lx + '" y="' + ly + '" text-anchor="' + (anchor || 'start') + '">' + lbl + '</text>' : '');
+      const W2 = T[lang].why;
+      let s = '<svg viewBox="0 0 540 440" role="img" aria-label="' + t('fsmT') + '"><defs><marker id="ah" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="#9b9b9f"/></marker></defs><g class="ed">';
+      s += ar(145, 60, 145, 76, W2.tension, 152, 72) + ar(145, 128, 145, 158, W2.init, 152, 147) + ar(145, 210, 145, 230, W2.start, 152, 224) + ar(145, 282, 145, 302, W2.tare, 152, 296) + ar(145, 354, 145, 374, W2.target + ' / ' + W2.stop, 152, 368);
+      s += '<path d="M40 401 L18 401 L18 185 L38 185" marker-end="url(#ah)"/><text x="14" y="300" transform="rotate(-90 14 300)" text-anchor="middle">' + W2.remove + '</text>';
+      s += ar(250, 120, 330, 230, '', 0, 0) + ar(250, 257, 298, 257, '', 0, 0) + ar(250, 329, 330, 284, '', 0, 0);
+      s += '<text x="420" y="300" text-anchor="middle">' + W2.sensor + '</text><text x="420" y="314" text-anchor="middle">' + W2.jam + '</text><text x="420" y="328" text-anchor="middle">' + W2.lowflow + '</text>';
+      s += '<path d="M405 230 L405 90 L252 90" marker-end="url(#ah)"/><text x="410" y="160">' + (lang === 'fr' ? 'acquittement' : 'acknowledge') + '</text>';
+      s += '</g>';
+      for (const k of D.STATES) {
+        const [x, y] = box(k), on = k === cur;
+        s += '<g class="st' + (on ? ' on' : '') + (k === 'E3' ? ' fault' : '') + '"><rect x="' + x + '" y="' + y + '" width="' + W + '" height="' + Hh + '" rx="6"/><text x="' + (x + 10) + '" y="' + (y + 21) + '" class="t1">' + k + ' · ' + S[k] + '</text><text x="' + (x + 10) + '" y="' + (y + 38) + '" class="t2">' + Sub[k] + '</text></g>';
+      }
+      $('fsmHemo').innerHTML = s + '</svg>';
+    }
+    function replayHemo() { if (hemoRaf) cancelAnimationFrame(hemoRaf); hemoT0 = null; let last = null; const tick = (ts) => { if (hemoT0 === null) hemoT0 = ts; const st = drawHemo((ts - hemoT0) / 1000); if (st && st !== last) { drawFSM(st); last = st; } hemoRaf = requestAnimationFrame(tick); }; hemoRaf = requestAnimationFrame(tick); }
     function drawHemo(real) {
-      if (!hemo || document.getElementById('view-hemo').hidden) return;
-      const total = hemo.t[hemo.t.length - 1], speed = total / 12; // le don entier en 12 s
+      if (!hemo || document.getElementById('view-hemo').hidden) return null;
+      const total = hemo.t[hemo.t.length - 1], speed = total / 14; // tout le cycle en 14 s
       const tt = Math.min(total, real * speed);
-      const i = Math.min(hemo.t.length - 1, Math.round(tt / 0.1));
+      const i = Math.min(hemo.t.length - 1, Math.round(tt / 0.1)), state = hemo.state[i];
       const cv = $('scHemo'), { c, w, h } = setupCanvas(cv);
       c.fillStyle = '#0a0a0b'; c.fillRect(0, 0, w, h);
-      // l'angle affiché oscille au vrai rythme du plateau (pas accéléré), pour rester lisible
-      const th = ((H.amp * Math.PI) / 180) * Math.sin(2 * Math.PI * H.freq * real);
-      const cx = w * 0.55, cy = h * 0.66;
-      // bras du donneur
-      c.fillStyle = '#26262a'; c.fillRect(20, 30, w * 0.22, 26); c.fillStyle = '#9b9b9f'; c.font = '10px "JetBrains Mono", monospace'; c.textAlign = 'left'; c.fillText(lang === 'fr' ? 'bras du donneur' : "donor's arm", 24, 24);
-      // tubulure et pince
-      const closed = hemo.duration && tt >= hemo.duration;
-      c.strokeStyle = '#c8102e'; c.lineWidth = 3; c.beginPath(); c.moveTo(20 + w * 0.22, 43); c.bezierCurveTo(w * 0.4, 43, cx - 40, cy - 90, cx - 10, cy - 46); c.stroke();
-      const px = w * 0.36, py = 60;
-      c.fillStyle = closed ? '#c8102e' : '#3a3a3d'; c.fillRect(px - 10, py - 4, 20, 16);
-      c.fillStyle = '#9b9b9f'; c.fillText((lang === 'fr' ? 'pince ' : 'clamp ') + (closed ? (lang === 'fr' ? 'fermée' : 'closed') : (lang === 'fr' ? 'ouverte' : 'open')), px - 30, py + 28);
-      // plateau basculant et poche
+      const k = Math.min(1500, w * 2.2), g = geo();
+      const agit = state === 'E6' && !(hemo.reason === 'jam' && hemo.state[i] === 'E6' && hemo.I[i] > 150);
+      // l'agitation est affichée au vrai rythme (pas accéléré), pour rester lisible
+      const fN = 0.0645 * (H.U - 0.1), phi = agit ? 2 * Math.PI * fN * real : -Math.PI / 2 + 0.0001;
+      let th = agit ? D.crankTheta(g, phi, 0) : 0;
+      if (hemo.reason === 'jam' && state !== 'E6' && hemo.tEnd && tt >= hemo.tEnd) th = hemo.theta[i];
+      const cx = w * 0.56, cy = h * 0.5;
+      c.font = '10px "JetBrains Mono", monospace'; c.lineCap = 'round';
+      // bâti
+      c.fillStyle = '#18181b'; c.fillRect(cx - 200, cy + 26, 330, h - cy - 40); c.strokeStyle = '#2a2a2e'; c.strokeRect(cx - 200, cy + 26, 330, h - cy - 40);
+      // cellule de pesée sous l'axe : elle porte tout le plateau
+      c.fillStyle = '#2b2b30'; c.fillRect(cx - 34, cy + 28, 68, 18); c.fillStyle = '#9b9b9f'; c.textAlign = 'center'; c.fillText(lang === 'fr' ? 'capteur de pesée' : 'load cell', cx, cy + 60);
+      c.strokeStyle = '#6c6c70'; c.lineWidth = 6; c.beginPath(); c.moveTo(cx, cy + 28); c.lineTo(cx, cy); c.stroke();
+      // moteur MA + manivelle + bielle
+      const Cx = cx + g.b * k, Cy = cy + g.L * k;
+      c.fillStyle = '#26262a'; c.fillRect(Cx - 22, Cy - 14, 44, 28); c.fillStyle = '#9b9b9f'; c.fillText('MA', Cx, Cy + 26 + 10);
+      const Bx = Cx + g.r * k * Math.cos(phi), By = Cy - g.r * k * Math.sin(phi);
+      const Ax = cx + g.b * k * Math.cos(th), Ay = cy - g.b * k * Math.sin(th);
+      c.strokeStyle = '#e0a458'; c.lineWidth = 4; c.beginPath(); c.moveTo(Cx, Cy); c.lineTo(Bx, By); c.stroke();
+      c.strokeStyle = '#c9c9cc'; c.lineWidth = 3; c.beginPath(); c.moveTo(Bx, By); c.lineTo(Ax, Ay); c.stroke();
+      [[Cx, Cy], [Bx, By], [Ax, Ay]].forEach(([x, y]) => { c.fillStyle = '#0a0a0b'; c.beginPath(); c.arc(x, y, 3.5, 0, 7); c.fill(); c.strokeStyle = '#c9c9cc'; c.lineWidth = 1.5; c.stroke(); });
+      c.fillStyle = '#9b9b9f'; c.textAlign = 'left'; c.fillText(lang === 'fr' ? 'manivelle' : 'crank', Cx + 26, Cy - 4); c.fillText(lang === 'fr' ? 'bielle' : 'rod', Ax + 10, (Ay + By) / 2);
+      // plateau et poche
+      const onPlate = ['E5', 'E6', 'E7'].includes(state) || (state === 'E3' && hemo.tare);
       c.save(); c.translate(cx, cy); c.rotate(-th);
-      c.fillStyle = '#3a3a3d'; c.fillRect(-110, 6, 220, 8);
-      const V = Math.min(hemo.V, Math.max(0, (hemo.truth[i] - D.BAG.tare - D.BAG.anticoag * D.BAG.acDensity) / D.BLOOD));
-      const fill = Math.min(1, V / 520), bh = 22 + 34 * fill;
-      c.fillStyle = 'rgba(200,16,46,' + (0.25 + 0.6 * fill) + ')'; c.strokeStyle = '#c9c9cc'; c.lineWidth = 1.5;
-      c.beginPath(); c.ellipse(0, 6 - bh / 2, 80, bh / 2, 0, 0, Math.PI * 2); c.fill(); c.stroke();
+      c.fillStyle = '#3a3a3d'; c.fillRect(-150, -4, 230, 8); c.fillRect(-150, -26, 6, 26); c.fillRect(74, -26, 6, 26);
+      if (onPlate) {
+        const V = hemo.vol[i], fill = Math.min(1, V / 520), bh = 10 + 34 * fill;
+        c.fillStyle = 'rgba(200,16,46,' + (0.2 + 0.65 * fill) + ')'; c.strokeStyle = '#c9c9cc'; c.lineWidth = 1.5;
+        c.beginPath(); c.ellipse(-36, -4 - bh / 2, 92, bh / 2, 0, 0, Math.PI * 2); c.fill(); c.stroke();
+      }
       c.restore();
-      // axe et cellule de pesée
-      c.fillStyle = '#c9c9cc'; c.beginPath(); c.arc(cx, cy + 10, 5, 0, Math.PI * 2); c.fill();
-      c.fillStyle = '#26262a'; c.fillRect(cx - 30, cy + 22, 60, 16); c.fillStyle = '#9b9b9f'; c.textAlign = 'center'; c.fillText(lang === 'fr' ? 'cellule de pesée' : 'load cell', cx, cy + 52);
+      c.fillStyle = '#c9c9cc'; c.beginPath(); c.arc(cx, cy, 5, 0, 7); c.fill();
+      c.fillStyle = '#9b9b9f'; c.textAlign = 'center'; c.fillText(lang === 'fr' ? 'plateau' : 'plate', cx - 70, cy + 20);
+      // donneur, tubulure et pince motorisée MC
+      const px = cx - 230, py = cy - 30, cl = hemo.clamp[i];
+      c.fillStyle = '#26262a'; c.fillRect(16, 26, w * 0.16, 22); c.fillStyle = '#9b9b9f'; c.textAlign = 'left'; c.fillText(lang === 'fr' ? 'bras du donneur' : "donor's arm", 18, 18);
+      if (onPlate && hemo.tDon !== null && tt >= hemo.tDon) { c.strokeStyle = cl > 0.99 ? '#5a2a30' : '#c8102e'; c.lineWidth = 3; c.beginPath(); c.moveTo(16 + w * 0.16, 37); c.bezierCurveTo(px - 20, 37, px - 20, py, px + 10, py); c.lineTo(cx - 110, cy - 14); c.stroke(); }
+      c.fillStyle = '#2b2b30'; c.fillRect(px - 8, py + 6, 36, 14); c.fillStyle = cl > 0.5 ? '#c8102e' : '#6c6c70'; c.fillRect(px + 4, py - 22 + 22 * cl, 12, 22);
+      c.fillStyle = '#9b9b9f'; c.textAlign = 'center'; c.fillText('MC · ' + (cl > 0.99 ? (lang === 'fr' ? 'pincé' : 'closed') : cl < 0.01 ? (lang === 'fr' ? 'ouvert' : 'open') : '…'), px + 10, py + 34);
       // affichage
-      c.textAlign = 'left'; c.fillStyle = '#f2f2f2'; c.font = '600 13px Inter, sans-serif';
-      c.fillText(fmt(V, 0) + ' / ' + H.target + ' mL', w - 150, 40);
+      c.textAlign = 'right'; c.fillStyle = state === 'E3' ? '#ff8a8a' : '#f2f2f2'; c.font = '600 13px Inter, sans-serif';
+      c.fillText(state + ' · ' + T[lang].st[state], w - 14, 24);
       c.font = '10px "JetBrains Mono", monospace'; c.fillStyle = '#9b9b9f';
-      c.fillText((lang === 'fr' ? 'estimé ' : 'estimated ') + fmt((hemo.est[i] - D.BAG.tare - D.BAG.anticoag * D.BAG.acDensity) / D.BLOOD, 0) + ' mL', w - 150, 58);
-      c.fillText(fmt(hemo.Q[i], 0) + ' mL/min', w - 150, 74);
+      c.fillText(fmt(hemo.vol[i], 0) + ' / ' + H.target + ' mL · ' + (lang === 'fr' ? 'estimé ' : 'est. ') + fmt(hemo.est[i], 0) + ' mL', w - 14, 42);
+      c.fillText('S1 ' + fmt(hemo.S1[i], 3) + ' V · S2 ' + fmt(hemo.S2[i], 3) + ' V · MA ' + fmt(hemo.I[i], 0) + ' mA', w - 14, 58);
+      c.fillText(fmt(hemo.Q[i], 0) + ' mL/min · θ ' + fmt((th * 180) / Math.PI, 1) + '°', w - 14, 74);
       $('hemoT').textContent = 't = ' + fmt(tt / 60, 2) + ' min (×' + fmt(speed, 0) + ')';
+      return state;
     }
     $('playHemo').addEventListener('click', replayHemo);
 
