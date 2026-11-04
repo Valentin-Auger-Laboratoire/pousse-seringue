@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dispositifs médicaux</title>
+  <meta name="description" content="Simulateur de trois dispositifs médicaux : pousse-seringue (chaîne mécanique, occlusion, pharmacocinétique), pompe à insuline en boucle fermée et hémomixeur de don de sang (pesée sur plateau basculant).">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0c0c0d; --panel: #161618; --border: #262628; --border-hi: #3a3a3d;
+      --text: #f2f2f2; --dim: #9b9b9f; --muted: #6c6c70; --accent: #c8102e; --line: #c9c9cc; --warn: #e0a458; --ok: #8fd18f;
+      --mono: "JetBrains Mono", ui-monospace, monospace; --sans: "Inter", system-ui, sans-serif;
+      color-scheme: dark;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: var(--sans); line-height: 1.55; -webkit-font-smoothing: antialiased; }
+    .wrap { max-width: 1280px; margin: 0 auto; padding: 24px max(16px, env(safe-area-inset-right, 0px)) 48px max(16px, env(safe-area-inset-left, 0px)); }
+    .top { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; }
+    .back { font-size: 0.9rem; color: var(--dim); text-decoration: none; }
+    .back:hover { color: var(--accent); }
+    .lang { display: flex; border: 1px solid var(--border-hi); }
+    .lang button { font: 500 0.78rem var(--mono); letter-spacing: .05em; background: none; color: var(--dim); border: 0; padding: 5px 10px; cursor: pointer; }
+    .lang button + button { border-left: 1px solid var(--border-hi); }
+    .lang button[aria-pressed="true"] { background: var(--text); color: var(--bg); }
+    .eyebrow { font: 500 0.82rem var(--mono); color: var(--accent); letter-spacing: .04em; }
+    h1 { font-size: clamp(1.6rem, 3.4vw, 2.3rem); line-height: 1.15; margin: 6px 0 10px; text-wrap: balance; }
+    .intro { color: var(--dim); max-width: 82ch; }
+    .warnbox { border: 1px solid #4a3a20; background: #1a160f; color: var(--warn); border-radius: 6px; padding: 8px 12px; font-size: 0.84rem; margin-top: 12px; }
+    .tabs { display: flex; gap: 8px; margin: 24px 0 16px; flex-wrap: wrap; }
+    .tab { font: 0.85rem var(--mono); background: none; color: var(--dim); border: 1px solid var(--border); border-radius: 999px; padding: 6px 14px; cursor: pointer; }
+    .tab[aria-selected="true"] { color: var(--accent); border-color: var(--accent); }
+    [hidden] { display: none !important; }
+    .grid { display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: 20px; align-items: start; }
+    .stack { display: grid; gap: 16px; min-width: 0; }
+    .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px; min-width: 0; }
+    h2 { font: 600 0.78rem var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--dim); margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+    h3 { font: 600 0.72rem var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--dim); margin: 14px 0 10px; padding-top: 12px; border-top: 1px solid var(--border); }
+    button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .btn { font: 500 0.82rem var(--sans); background: none; color: var(--text); border: 1px solid var(--border-hi); border-radius: 6px; padding: 6px 11px; cursor: pointer; white-space: nowrap; }
+    .btn:hover { border-color: var(--accent); color: var(--accent); }
+    .btn[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+    .seg { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+    .ctl { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; margin-bottom: 10px; }
+    .ctl label { font: 500 0.76rem var(--mono); color: var(--dim); }
+    .ctl output { font: 0.8rem var(--mono); font-variant-numeric: tabular-nums; text-align: right; }
+    .ctl input[type=range] { grid-column: 1 / -1; width: 100%; accent-color: var(--accent); }
+    .lab { font: 500 0.74rem var(--mono); color: var(--dim); margin: 2px 0 6px; }
+    label.ck { display: flex; gap: 8px; align-items: center; font-size: 0.86rem; cursor: pointer; margin-bottom: 8px; }
+    label.ck input { accent-color: var(--accent); }
+    .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+    .kpi { border: 1px solid var(--border); border-radius: 6px; padding: 9px 11px; min-width: 0; }
+    .kpi dt { font: 0.68rem var(--mono); color: var(--dim); }
+    .kpi dd { font: 600 1.05rem var(--sans); font-variant-numeric: tabular-nums; margin-top: 2px; overflow-wrap: anywhere; }
+    .kpi dd small { font: 400 0.72rem var(--mono); color: var(--dim); margin-left: 3px; }
+    .kpi.main dd { color: var(--accent); } .kpi.good dd { color: var(--ok); } .kpi.bad dd { color: #ff8a8a; }
+    .scene { width: 100%; height: 260px; display: block; border: 1px solid var(--border); border-radius: 6px; background: #0a0a0b; margin-top: 12px; }
+    .charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .chart { min-width: 0; }
+    .chart p { font: 0.72rem var(--mono); color: var(--dim); margin-bottom: 4px; display: flex; gap: 10px; flex-wrap: wrap; }
+    .chart p i { display: inline-block; width: 12px; height: 2px; vertical-align: 3px; margin-right: 5px; }
+    .chart canvas { width: 100%; height: 190px; display: block; border: 1px solid var(--border); border-radius: 6px; background: #0a0a0b; }
+    .chart.big canvas { height: 260px; }
+    .issues { list-style: none; display: grid; gap: 6px; margin-top: 12px; }
+    .issues li { font-size: 0.85rem; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: baseline; padding: 7px 10px; border: 1px solid var(--border); border-radius: 6px; }
+    .issues .lv { font: 600 0.68rem var(--mono); text-transform: uppercase; padding: 1px 6px; border-radius: 3px; border: 1px solid var(--warn); color: var(--warn); white-space: nowrap; }
+    .issues .err .lv { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .issues .good { display: block; color: var(--ok); border-color: #2e4a2e; }
+    table { width: 100%; border-collapse: collapse; font: 0.8rem var(--mono); font-variant-numeric: tabular-nums; }
+    th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+    td.n, th.n { text-align: right; }
+    th { color: var(--dim); font-weight: 500; }
+    tr.sel td { color: var(--accent); }
+    .tablewrap { overflow-x: auto; }
+    .hint { font-size: 0.8rem; color: var(--dim); margin-top: 8px; }
+    .note { font-size: 0.82rem; color: var(--dim); }
+    .note p + p { margin-top: 6px; }
+    .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; font: 0.78rem var(--mono); color: var(--dim); }
+    @media (max-width: 1000px) { .grid { grid-template-columns: minmax(0, 1fr); } .main-col { order: -1; } }
+    @media (max-width: 700px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .charts { grid-template-columns: minmax(0, 1fr); } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <a class="back" href="https://valentin-auger-laboratoire.github.io/portfolio/#projets" data-t="back">← Retour au portfolio</a>
+      <div class="lang" role="group" aria-label="Langue / Language">
+        <button type="button" data-lang="fr" aria-pressed="true">FR</button>
+        <button type="button" data-lang="en" aria-pressed="false">EN</button>
+      </div>
+    </div>
+    <p class="eyebrow" data-t="eyebrow">Outil de génie biomédical · mécanique, asservissement et sécurité</p>
+    <h1 data-t="title">Trois dispositifs médicaux : pousse-seringue, pompe à insuline et hémomixeur</h1>
+    <p class="intro" data-t="intro">Trois appareils qu'on trouve à l'hôpital, simulés de la mécanique jusqu'au patient. J'ai étudié le pousse-seringue et l'hémomixeur en TP de CPGE ; je les ai refaits ici de zéro, avec en plus la pompe à insuline. Le pousse-seringue injecte un médicament à débit précis pendant des heures : chaîne moteur-réducteur-vis, pression dans la ligne, alarmes d'occlusion et concentration dans le sang. La pompe à insuline en boucle fermée décide seule de la dose à partir d'un capteur de glucose, sur un patient diabétique virtuel. L'hémomixeur pèse la poche pendant un don de sang tout en la berçant pour mélanger l'anticoagulant, et ferme la pince au bon volume.</p>
+    <div class="warnbox" data-t="notMedical">Outil pédagogique : modèles simplifiés et valeurs plausibles. Il ne sert en aucun cas à régler un appareil ni à doser un médicament.</div>
+
+    <div class="tabs" role="tablist">
+      <button type="button" class="tab" role="tab" data-view="syr" aria-selected="true" data-t="tSyr">Pousse-seringue</button>
+      <button type="button" class="tab" role="tab" data-view="ins" aria-selected="false" data-t="tIns">Pompe à insuline</button>
+      <button type="button" class="tab" role="tab" data-view="hemo" aria-selected="false" data-t="tHemo">Hémomixeur</button>
+    </div>
+
+    <!-- ===== Pousse-seringue ===== -->
+    <section class="view grid" id="view-syr">
+      <div class="stack"><div class="panel" id="ctlSyr"></div></div>
+      <div class="stack main-col">
+        <div class="panel">
+          <dl class="kpis" id="kpiSyr"></dl>
+          <canvas class="scene" id="scSyr" aria-label="Pousse-seringue"></canvas>
+          <ul class="issues" id="issSyr"></ul>
+        </div>
+        <div class="panel charts">
+          <div class="chart"><p><span><i style="background:var(--accent)"></i><span data-t="lgQout">débit reçu par le patient</span></span><span><i style="background:var(--line)"></i><span data-t="lgQcmd">débit prescrit</span></span> (mL/h)</p><canvas id="chQ"></canvas></div>
+          <div class="chart"><p><span><i style="background:var(--warn)"></i><span data-t="lgP">pression dans la ligne</span></span><span><i style="background:#c8102e"></i><span data-t="lgAlarm">seuil d'alarme</span></span> (mmHg)</p><canvas id="chP"></canvas></div>
+          <div class="chart"><p><span><i style="background:var(--accent)"></i><span data-t="lgC">concentration dans le sang</span></span><span><i style="background:#2e4a2e"></i><span data-t="lgWin">zone visée (fictive)</span></span> (µg/L)</p><canvas id="chC"></canvas></div>
+          <div class="chart"><p data-t="lgPulse">Débit instantané sur 20 s : un moteur pas à pas pousse par petits paquets</p><canvas id="chPulse"></canvas></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== Pompe à insuline ===== -->
+    <section class="view grid" id="view-ins" hidden>
+      <div class="stack"><div class="panel" id="ctlIns"></div></div>
+      <div class="stack main-col">
+        <div class="panel">
+          <dl class="kpis" id="kpiIns"></dl>
+          <div class="chart big" style="margin-top:12px"><p><span><i style="background:var(--accent)"></i><span data-t="lgG">glycémie réelle</span></span><span><i style="background:var(--line)"></i><span data-t="lgCgm">capteur (toutes les 5 min)</span></span><span><i style="background:#2e4a2e"></i>70–180 mg/dL</span><span><i style="background:var(--warn)"></i><span data-t="lgMeal">repas (g de glucides)</span></span></p><canvas id="chG"></canvas></div>
+          <div class="chart" style="margin-top:12px"><p data-t="lgU">Insuline délivrée par la pompe (U/h) ; les pics sont les bolus de repas</p><canvas id="chU"></canvas></div>
+          <ul class="issues" id="issIns"></ul>
+        </div>
+        <div class="panel"><h2 data-t="cmpT">Les trois modes sur le même scénario</h2><div class="tablewrap"><table id="cmpIns"></table></div><p class="hint" data-t="cmpHint">Temps dans la cible (70–180 mg/dL) : l'objectif recommandé en diabétologie est au-delà de 70 %, avec moins de 4 % du temps sous 70 mg/dL.</p></div>
+      </div>
+    </section>
+
+    <!-- ===== Hémomixeur ===== -->
+    <section class="view grid" id="view-hemo" hidden>
+      <div class="stack"><div class="panel" id="ctlHemo"></div></div>
+      <div class="stack main-col">
+        <div class="panel">
+          <dl class="kpis" id="kpiHemo"></dl>
+          <canvas class="scene" id="scHemo" aria-label="Hémomixeur"></canvas>
+          <div class="controls"><button type="button" class="btn" id="playHemo" data-t="replay">Rejouer le don</button><span id="hemoT"></span></div>
+          <ul class="issues" id="issHemo"></ul>
+        </div>
+        <div class="panel charts">
+          <div class="chart"><p><span><i style="background:#6c6c70"></i><span data-t="lgRaw">cellule de pesée (brut)</span></span><span><i style="background:var(--accent)"></i><span data-t="lgEst">masse estimée</span></span><span><i style="background:var(--line)"></i><span data-t="lgTrue">masse vraie</span></span> · <span data-t="lgEnd">30 dernières secondes</span></p><canvas id="chM"></canvas></div>
+          <div class="chart"><p><span><i style="background:var(--warn)"></i><span data-t="lgFlow">débit du don (mL/min)</span></span></p><canvas id="chFlow"></canvas></div>
+        </div>
+        <div class="panel"><h2 data-t="hcmpT">Les quatre façons d'estimer la masse</h2><div class="tablewrap"><table id="cmpHemo"></table></div><p class="hint" data-t="hcmpHint">Quand le plateau penche, la cellule ne voit qu'une partie du poids (facteur cos θ), et la rotation ajoute une petite force. La moyenne sur une oscillation lisse le signal mais garde un biais : la moyenne de cos(A·sin ωt) vaut J₀(A), un peu moins que 1. Corriger avec l'angle mesuré par le codeur, ou peser au passage à l'horizontale, supprime ce biais.</p></div>
+      </div>
+    </section>
+
+    <div class="panel note" style="margin-top:20px">
+      <p data-t="note1">Pousse-seringue : débit Q = S·v (S section de la seringue, v vitesse du piston) ; v = pas de la vis × vitesse de la vis ; pertes de charge par la loi de Poiseuille (8μL/πr⁴) dans le cathéter et la tubulure. La seringue et la ligne sont élastiques (compliance C) : en cas d'occlusion, la pression monte de Q/C par seconde, l'alarme met donc C·P/Q à se déclencher, et le volume stocké C·P part d'un coup au débouchage si l'appareil ne recule pas (« anti-bolus »). Concentration dans le sang : modèle à un compartiment, dC/dt = débit·c/Vd − k·C.</p>
+      <p data-t="note2">Pompe à insuline : modèle minimal de Bergman pour un patient de type 1 (action de l'insuline à distance), absorption sous-cutanée de l'insuline et digestion des glucides à deux compartiments, capteur continu avec 10 min de retard et du bruit, pompe qui délivre par impulsions de 0,05 U. Boucle fermée : PID sur la glycémie du capteur, limite d'insuline active et suspension prédictive avant l'hypoglycémie ; mode hybride = boucle fermée + bolus annoncés aux repas. Hémomixeur : débit du don par la loi de Poiseuille (aiguille 16 G, tubulure, veine sous garrot, poche plus bas que le bras), poche de 63 mL d'anticoagulant, sang à 1,053 g/mL, plateau basculant de pivot à 6 cm de la poche.</p>
+    </div>
+  </div>
+
+  <script src="dispositifs.js"></script>
+  <script>
+  (function () {
+    'use strict';
+    const D = window.Dispositifs;
+    const $ = (id) => document.getElementById(id);
+    const T = {
+      fr: {
+        back: '← Retour au portfolio', eyebrow: 'Outil de génie biomédical · mécanique, asservissement et sécurité', title: 'Trois dispositifs médicaux : pousse-seringue, pompe à insuline et hémomixeur',
+        intro: "Trois appareils qu'on trouve à l'hôpital, simulés de la mécanique jusqu'au patient. J'ai étudié le pousse-seringue et l'hémomixeur en TP de CPGE ; je les ai refaits ici de zéro, avec en plus la pompe à insuline. Le pousse-seringue injecte un médicament à débit précis pendant des heures : chaîne moteur-réducteur-vis, pression dans la ligne, alarmes d'occlusion et concentration dans le sang. La pompe à insuline en boucle fermée décide seule de la dose à partir d'un capteur de glucose, sur un patient diabétique virtuel. L'hémomixeur pèse la poche pendant un don de sang tout en la berçant pour mélanger l'anticoagulant, et ferme la pince au bon volume.",
+        notMedical: "Outil pédagogique : modèles simplifiés et valeurs plausibles. Il ne sert en aucun cas à régler un appareil ni à doser un médicament.",
+        tSyr: 'Pousse-seringue', tIns: 'Pompe à insuline', tHemo: 'Hémomixeur',
+        lgQout: 'débit reçu par le patient', lgQcmd: 'débit prescrit', lgP: 'pression dans la ligne', lgAlarm: "seuil d'alarme", lgC: 'concentration dans le sang', lgWin: 'zone visée (fictive)', lgPulse: 'Débit instantané sur 20 s : un moteur pas à pas pousse par petits paquets',
+        lgG: 'glycémie réelle', lgCgm: 'capteur (toutes les 5 min)', lgMeal: 'repas (g de glucides)', lgU: 'Insuline délivrée par la pompe (U/h) ; les pics sont les bolus de repas',
+        cmpT: 'Les trois modes sur le même scénario', cmpHint: "Temps dans la cible (70–180 mg/dL) : l'objectif recommandé en diabétologie est au-delà de 70 %, avec moins de 4 % du temps sous 70 mg/dL.",
+        lgRaw: 'cellule de pesée (brut)', lgEst: 'masse estimée', lgTrue: 'masse vraie', lgEnd: '30 dernières secondes', lgFlow: 'débit du don (mL/min)', replay: 'Rejouer le don',
+        hcmpT: "Les quatre façons d'estimer la masse", hcmpHint: "Quand le plateau penche, la cellule ne voit qu'une partie du poids (facteur cos θ), et la rotation ajoute une petite force. La moyenne sur une oscillation lisse le signal mais garde un biais : la moyenne de cos(A·sin ωt) vaut J₀(A), un peu moins que 1. Corriger avec l'angle mesuré par le codeur, ou peser au passage à l'horizontale, supprime ce biais.",
+        note1: "Pousse-seringue : débit Q = S·v (S section de la seringue, v vitesse du piston) ; v = pas de la vis × vitesse de la vis ; pertes de charge par la loi de Poiseuille (8μL/πr⁴) dans le cathéter et la tubulure. La seringue et la ligne sont élastiques (compliance C) : en cas d'occlusion, la pression monte de Q/C par seconde, l'alarme met donc C·P/Q à se déclencher, et le volume stocké C·P part d'un coup au débouchage si l'appareil ne recule pas (« anti-bolus »). Concentration dans le sang : modèle à un compartiment, dC/dt = débit·c/Vd − k·C.",
+        note2: "Pompe à insuline : modèle minimal de Bergman pour un patient de type 1 (action de l'insuline à distance), absorption sous-cutanée de l'insuline et digestion des glucides à deux compartiments, capteur continu avec 10 min de retard et du bruit, pompe qui délivre par impulsions de 0,05 U. Boucle fermée : PID sur la glycémie du capteur, limite d'insuline active et suspension prédictive avant l'hypoglycémie ; mode hybride = boucle fermée + bolus annoncés aux repas. Hémomixeur : débit du don par la loi de Poiseuille (aiguille 16 G, tubulure, veine sous garrot, poche plus bas que le bras), poche de 63 mL d'anticoagulant, sang à 1,053 g/mL, plateau basculant de pivot à 6 cm de la poche.",
+        // pousse-seringue
+        syrT: 'Seringue et ligne', syr: 'Seringue', needle: 'Cathéter', Q: 'Débit prescrit', drive: 'Motorisation', stepper: 'Pas à pas (boucle ouverte)', dc: 'Courant continu asservi',
+        mechT: 'Mécanique', pitch: 'Pas de la vis', ratio: 'Réducteur', micro: 'Micro-pas', slack: 'Jeu au démarrage',
+        safeT: 'Sécurité', alarmP: 'Seuil d’alarme d’occlusion', occl: 'Occlusion (tubulure pincée) à 30 min, pendant 40 min', anti: 'Anti-bolus (recul du piston à l’alarme)', bolus: 'Bolus de 2 mL à 1 h',
+        drugT: 'Médicament (fictif)', drug: { short: 'demi-vie courte (2 min)', long: 'demi-vie longue (6 h)' },
+        kV: 'Vitesse du piston', kRpm: 'Moteur', kStep: 'Résolution', kF: 'Effort sur le piston', kAuto: 'Autonomie', kOccl: 'Alarme d’occlusion après', kBolus: 'Bolus au débouchage', kDel: 'Reçu en 2 h',
+        iOccl: (t) => 'Alarme d’occlusion ' + t + ' après le blocage : à faible débit, la seringue se « gonfle » longtemps avant que la pression n’atteigne le seuil.', iAnti: (v) => 'Anti-bolus : le piston recule et libère ' + v + ' mL de pression, qui seraient partis d’un coup dans la veine.',
+        iNoAnti: (v) => 'Sans anti-bolus, ' + v + ' mL stockés dans la seringue partent d’un coup au débouchage : dangereux avec un médicament à demi-vie courte.', iEnd: (t) => 'Alarme de fin de seringue à ' + t + '.',
+        iSlack: (t) => 'Jeu mécanique au démarrage : le patient ne reçoit rien pendant ' + t + '. Les soignants purgent la ligne et lancent la pompe avant de la brancher.', iOk: 'Débit stable, aucune alarme.',
+        iLow: 'Débit très faible avec un moteur pas à pas : le débit arrive par impulsions (voir le dernier graphique).',
+        // insuline
+        insT: 'Mode de la pompe', mode: { manual: 'Manuel (basale + bolus)', hybrid: 'Boucle fermée hybride', closed: 'Boucle fermée seule' },
+        scT: 'Scénario de la journée', sc: { normal: 'Journée normale', forgot: 'Bolus de midi oublié', late: 'Bolus de midi 45 min en retard', snack: 'Collation non annoncée', sport: 'Après-midi de sport', sick: 'Malade (résistance à l’insuline)' },
+        target: 'Glycémie visée', advT: 'Réglages du régulateur', kp: 'Kp', ki: 'Ki', kd: 'Kd',
+        kTir: 'Temps dans la cible', kLow: 'Sous 70 mg/dL', kHigh: 'Au-dessus de 180', kMean: 'Moyenne', kTot: 'Insuline sur 24 h',
+        cmpHead: ['Mode', 'Dans la cible', 'Sous 70', 'Au-dessus de 180', 'Minimum', 'Maximum', 'Insuline'],
+        iHypo: 'Hypoglycémie : la glycémie passe sous 70 mg/dL.', iHigh: 'Hyperglycémie marquée (plus de 250 mg/dL) pendant une partie de la journée.', iGoodI: 'Glycémie dans la cible la plupart du temps, sans hypoglycémie.',
+        iSport: 'Le sport rend plus sensible à l’insuline : une boucle fermée sans « mode sport » délivre un peu trop. Les vrais systèmes relèvent la cible pendant l’effort.',
+        // hémomixeur
+        hemoT: 'Don de sang', targetV: 'Volume à prélever', method: 'Estimation de la masse', meth: { raw: 'Signal brut', avg: 'Moyenne sur une oscillation', angle: 'Correction par l’angle (codeur)', level: 'Pesée à l’horizontale' },
+        rockT: 'Agitation', amp: 'Amplitude du basculement', freq: 'Fréquence', donorT: 'Donneur et ligne', Pv: 'Pression veineuse (garrot)', h: 'Poche sous le bras', clamp: 'Temps de fermeture de la pince',
+        kVol: 'Volume prélevé', kErr: 'Écart à la cible', kDur: 'Durée du don', kRatio: 'Part d’anticoagulant',
+        hcmpHead: ['Méthode', 'Volume final', 'Écart', 'Durée'],
+        iLong: 'Don de plus de 15 minutes : risque de caillots, la poche ne servira pas pour les plaquettes.', iLowF: 'Débit inférieur à 20 mL/min pendant plus de 30 s : alarme « débit faible ».',
+        iOut: 'Volume hors de la tolérance de ± 10 % : poche non conforme.', iRaw: 'Le signal brut oscille avec le plateau : la pince se ferme sur un pic de mesure, trop tôt.', iAvg: 'La moyenne sous-estime la masse (biais en J₀) : la pince se ferme trop tard.', iGoodH: 'Volume dans la tolérance, mélange correct.',
+        t: 't',
+      },
+      en: {
+        back: '← Back to portfolio', eyebrow: 'Biomedical engineering tool · mechanics, control and safety', title: 'Three medical devices: syringe pump, insulin pump and blood mixer',
+        intro: 'Three hospital devices, simulated from the mechanics to the patient. I studied the syringe pump and the blood mixer in my preparatory-class lab sessions; I rebuilt them here from scratch and added the insulin pump. The syringe pump injects a drug at a precise rate for hours: motor-gearbox-screw chain, line pressure, occlusion alarms and blood concentration. The closed-loop insulin pump decides the dose by itself from a glucose sensor, on a virtual diabetic patient. The blood mixer weighs the bag during a blood donation while rocking it to mix the anticoagulant, and closes the clamp at the right volume.',
+        notMedical: 'Teaching tool: simplified models and plausible values. It must never be used to set up a device or dose a drug.',
+        tSyr: 'Syringe pump', tIns: 'Insulin pump', tHemo: 'Blood mixer',
+        lgQout: 'flow received by the patient', lgQcmd: 'prescribed flow', lgP: 'line pressure', lgAlarm: 'alarm threshold', lgC: 'blood concentration', lgWin: 'target range (fictitious)', lgPulse: 'Instantaneous flow over 20 s: a stepper motor pushes in small packets',
+        lgG: 'true glucose', lgCgm: 'sensor (every 5 min)', lgMeal: 'meals (g of carbs)', lgU: 'Insulin delivered by the pump (U/h); spikes are meal boluses',
+        cmpT: 'The three modes on the same scenario', cmpHint: 'Time in range (70–180 mg/dL): the recommended target in diabetes care is above 70%, with less than 4% of the time below 70 mg/dL.',
+        lgRaw: 'load cell (raw)', lgEst: 'estimated mass', lgTrue: 'true mass', lgEnd: 'last 30 seconds', lgFlow: 'donation flow (mL/min)', replay: 'Replay the donation',
+        hcmpT: 'The four ways to estimate the mass', hcmpHint: 'When the plate tilts, the load cell only sees part of the weight (cos θ factor), and rotation adds a small force. Averaging over one oscillation smooths the signal but keeps a bias: the mean of cos(A·sin ωt) is J₀(A), slightly below 1. Correcting with the encoder angle, or weighing when the plate is level, removes this bias.',
+        note1: 'Syringe pump: flow Q = S·v (S syringe cross-section, v plunger speed); v = screw pitch × screw speed; pressure drops by Poiseuille (8μL/πr⁴) in the catheter and tubing. The syringe and line are elastic (compliance C): during an occlusion, pressure rises by Q/C per second, so the alarm takes C·P/Q to trigger, and the stored volume C·P is released at once when cleared unless the device backs off ("anti-bolus"). Blood concentration: one-compartment model, dC/dt = flow·c/Vd − k·C.',
+        note2: 'Insulin pump: Bergman minimal model for a type 1 patient (remote insulin action), two-compartment subcutaneous insulin absorption and carbohydrate digestion, continuous sensor with 10 min delay and noise, pump delivering 0.05 U pulses. Closed loop: PID on sensor glucose, insulin-on-board limit and predictive suspension before hypoglycaemia; hybrid mode = closed loop + meal boluses. Blood mixer: donation flow by Poiseuille (16 G needle, tubing, vein under cuff, bag below the arm), bag with 63 mL anticoagulant, blood 1.053 g/mL, rocking plate pivoting 6 cm from the bag.',
+        syrT: 'Syringe and line', syr: 'Syringe', needle: 'Catheter', Q: 'Prescribed flow', drive: 'Drive', stepper: 'Stepper (open loop)', dc: 'Servo DC motor',
+        mechT: 'Mechanics', pitch: 'Screw pitch', ratio: 'Gear ratio', micro: 'Microsteps', slack: 'Start-up slack',
+        safeT: 'Safety', alarmP: 'Occlusion alarm threshold', occl: 'Occlusion (clamped tubing) at 30 min, for 40 min', anti: 'Anti-bolus (plunger backs off at alarm)', bolus: '2 mL bolus at 1 h',
+        drugT: 'Drug (fictitious)', drug: { short: 'short half-life (2 min)', long: 'long half-life (6 h)' },
+        kV: 'Plunger speed', kRpm: 'Motor', kStep: 'Resolution', kF: 'Force on plunger', kAuto: 'Run time', kOccl: 'Occlusion alarm after', kBolus: 'Bolus when cleared', kDel: 'Delivered in 2 h',
+        iOccl: (t) => 'Occlusion alarm ' + t + ' after the blockage: at low flow the syringe "inflates" for a long time before pressure reaches the threshold.', iAnti: (v) => 'Anti-bolus: the plunger backs off and releases ' + v + ' mL of pressure that would have gone into the vein at once.',
+        iNoAnti: (v) => 'Without anti-bolus, ' + v + ' mL stored in the syringe are released at once when cleared: dangerous with a short half-life drug.', iEnd: (t) => 'Near-empty syringe alarm at ' + t + '.',
+        iSlack: (t) => 'Mechanical slack at start-up: the patient receives nothing for ' + t + '. Nurses prime the line and start the pump before connecting it.', iOk: 'Steady flow, no alarm.',
+        iLow: 'Very low flow with a stepper motor: flow arrives in pulses (see the last chart).',
+        insT: 'Pump mode', mode: { manual: 'Manual (basal + bolus)', hybrid: 'Hybrid closed loop', closed: 'Fully closed loop' },
+        scT: 'Day scenario', sc: { normal: 'Normal day', forgot: 'Lunch bolus forgotten', late: 'Lunch bolus 45 min late', snack: 'Unannounced snack', sport: 'Afternoon sport', sick: 'Sick (insulin resistance)' },
+        target: 'Target glucose', advT: 'Controller settings', kp: 'Kp', ki: 'Ki', kd: 'Kd',
+        kTir: 'Time in range', kLow: 'Below 70 mg/dL', kHigh: 'Above 180', kMean: 'Mean', kTot: 'Insulin over 24 h',
+        cmpHead: ['Mode', 'In range', 'Below 70', 'Above 180', 'Minimum', 'Maximum', 'Insulin'],
+        iHypo: 'Hypoglycaemia: glucose drops below 70 mg/dL.', iHigh: 'Marked hyperglycaemia (above 250 mg/dL) for part of the day.', iGoodI: 'Glucose in range most of the time, without hypoglycaemia.',
+        iSport: 'Exercise increases insulin sensitivity: a closed loop without an "exercise mode" delivers slightly too much. Real systems raise the target during exercise.',
+        hemoT: 'Blood donation', targetV: 'Volume to collect', method: 'Mass estimation', meth: { raw: 'Raw signal', avg: 'Average over one oscillation', angle: 'Angle correction (encoder)', level: 'Weighing when level' },
+        rockT: 'Rocking', amp: 'Tilt amplitude', freq: 'Frequency', donorT: 'Donor and line', Pv: 'Venous pressure (cuff)', h: 'Bag below the arm', clamp: 'Clamp closing time',
+        kVol: 'Volume collected', kErr: 'Difference from target', kDur: 'Donation time', kRatio: 'Anticoagulant share',
+        hcmpHead: ['Method', 'Final volume', 'Difference', 'Time'],
+        iLong: 'Donation longer than 15 minutes: clotting risk, the bag cannot be used for platelets.', iLowF: 'Flow below 20 mL/min for more than 30 s: "low flow" alarm.',
+        iOut: 'Volume outside the ±10% tolerance: bag not compliant.', iRaw: 'The raw signal oscillates with the plate: the clamp closes on a measurement peak, too early.', iAvg: 'The average underestimates the mass (J₀ bias): the clamp closes too late.', iGoodH: 'Volume within tolerance, correct mixing.',
+        t: 't',
+      },
+    };
+    let lang = 'fr';
+    try { lang = localStorage.getItem('lang') || ((navigator.language || 'fr').toLowerCase().startsWith('fr') ? 'fr' : 'en'); } catch (e) {}
+    if (!T[lang]) lang = 'fr';
+    const t = (k) => T[lang][k];
+    const fmt = (v, d = 2) => (Number.isFinite(v) ? v.toLocaleString(lang === 'fr' ? 'fr-FR' : 'en-GB', { maximumFractionDigits: d }) : '—');
+    const kpi = (k, v, u, cls) => '<div class="kpi' + (cls ? ' ' + cls : '') + '"><dt>' + k + '</dt><dd>' + v + (u ? '<small>' + u + '</small>' : '') + '</dd></div>';
+    const dur = (s) => (s < 120 ? fmt(s, 0) + ' s' : s < 7200 ? fmt(s / 60, 0) + ' min' : fmt(s / 3600, 1) + ' h');
+    const hm = (min) => { const h = Math.floor(min / 60) % 24, m = Math.round(min % 60); return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0'); };
+    const issues = (el, list) => { el.innerHTML = list.map(([lv, m]) => (lv === 'good' ? '<li class="good">' + m + '</li>' : '<li class="' + lv + '"><span class="lv">!</span><span>' + m + '</span></li>')).join(''); };
+    const C = { accent: '#c8102e', line: '#c9c9cc', warn: '#e0a458', grey: '#6c6c70', green: '#7fbf7f' };
+
+    // ---------- Petits composants ----------
+    function segBtns(box, st, key, opts, onChange) {
+      const s = document.createElement('div'); s.className = 'seg';
+      opts.forEach(([v, label]) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'btn'; b.textContent = label; b.setAttribute('aria-pressed', String(st[key]) === String(v)); b.addEventListener('click', () => { st[key] = v; s.querySelectorAll('button').forEach((x) => x.setAttribute('aria-pressed', x === b)); onChange(); }); s.appendChild(b); });
+      box.appendChild(s);
+    }
+    function lab(box, txt) { const p = document.createElement('p'); p.className = 'lab'; p.textContent = txt; box.appendChild(p); }
+    function head(box, txt, first) { const h = document.createElement(first ? 'h2' : 'h3'); h.textContent = txt; box.appendChild(h); }
+    function slider(box, st, key, label, min, max, step, show, onChange, live) {
+      const row = document.createElement('div'); row.className = 'ctl';
+      row.innerHTML = '<label for="s-' + key + '">' + label + '</label><output></output><input type="range" id="s-' + key + '">';
+      const r = row.querySelector('input'), o = row.querySelector('output');
+      Object.assign(r, { min, max, step }); r.value = st[key]; o.textContent = show(st[key]);
+      r.addEventListener('input', () => { st[key] = parseFloat(r.value); o.textContent = show(st[key]); if (live) onChange(); });
+      r.addEventListener('change', onChange);
+      box.appendChild(row);
+    }
+    function check(box, st, key, label, onChange) { const l = document.createElement('label'); l.className = 'ck'; l.innerHTML = '<input type="checkbox"> <span>' + label + '</span>'; const c = l.querySelector('input'); c.checked = st[key]; c.addEventListener('change', () => { st[key] = c.checked; onChange(); }); box.appendChild(l); }
+
+    // ---------- Graphiques ----------
+    function setupCanvas(cv) {
+      const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
+      if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+      const c = cv.getContext('2d'); c.setTransform(dpr, 0, 0, dpr, 0, 0);
+      return { c, w, h };
+    }
+    function niceStep(range, n) { const r = range / n, m = Math.pow(10, Math.floor(Math.log10(r))), q = r / m; return (q < 1.5 ? 1 : q < 3.5 ? 2 : q < 7.5 ? 5 : 10) * m; }
+    function plot(cv, series, o = {}) {
+      const { c, w, h } = setupCanvas(cv);
+      c.fillStyle = '#0a0a0b'; c.fillRect(0, 0, w, h);
+      const pl = 48, pr = 8, ptop = 8, pb = 20;
+      const all = series.flatMap((s) => s.pts).filter((p) => Number.isFinite(p[1]));
+      let xmin = o.xmin ?? Math.min(...all.map((p) => p[0])), xmax = o.xmax ?? Math.max(...all.map((p) => p[0]));
+      let ymin = o.ymin, ymax = o.ymax;
+      if (ymin === undefined || ymax === undefined) { let lo = Math.min(...all.map((p) => p[1])), hi = Math.max(...all.map((p) => p[1])); if (!Number.isFinite(lo)) { lo = 0; hi = 1; } if (hi - lo < 1e-9) { hi += 1; lo -= 1; } const m = (hi - lo) * 0.08; ymin = ymin ?? lo - m; ymax = ymax ?? hi + m; }
+      if (!(xmax > xmin)) xmax = xmin + 1;
+      const X = (x) => pl + ((x - xmin) / (xmax - xmin)) * (w - pl - pr), Y = (y) => ptop + (1 - (y - ymin) / (ymax - ymin)) * (h - ptop - pb);
+      (o.bands || []).forEach((b) => { c.fillStyle = b.color; c.fillRect(pl, Y(b.hi), w - pl - pr, Y(b.lo) - Y(b.hi)); });
+      c.font = '10px "JetBrains Mono", monospace'; c.fillStyle = '#6c6c70'; c.strokeStyle = '#1e1e21'; c.lineWidth = 1;
+      const sy = niceStep(ymax - ymin, 4); c.textAlign = 'right'; c.textBaseline = 'middle';
+      for (let v = Math.ceil(ymin / sy) * sy; v <= ymax; v += sy) { c.beginPath(); c.moveTo(pl, Y(v)); c.lineTo(w - pr, Y(v)); c.stroke(); c.fillText(fmt(Math.abs(v) < sy / 1e6 ? 0 : v, Math.max(0, Math.min(6, -Math.floor(Math.log10(sy) + 1e-9)))), pl - 4, Y(v)); }
+      const sx = o.xstep || niceStep(xmax - xmin, 5); c.textAlign = 'center'; c.textBaseline = 'top';
+      for (let v = Math.ceil(xmin / sx) * sx; v <= xmax + 1e-9; v += sx) { c.beginPath(); c.moveTo(X(v), ptop); c.lineTo(X(v), h - pb); c.stroke(); c.fillText(o.xfmt ? o.xfmt(v) : fmt(v, 1), X(v), h - pb + 4); }
+      (o.hlines || []).forEach((l) => { c.strokeStyle = l.color; c.setLineDash([4, 4]); c.beginPath(); c.moveTo(pl, Y(l.y)); c.lineTo(w - pr, Y(l.y)); c.stroke(); c.setLineDash([]); });
+      c.save(); c.beginPath(); c.rect(pl, ptop, w - pl - pr, h - ptop - pb); c.clip();
+      series.forEach((s) => {
+        c.strokeStyle = s.color; c.lineWidth = s.width || 1.6; c.setLineDash(s.dash || []); c.beginPath(); let pen = false;
+        if (s.steps) { s.pts.forEach(([x, y], i) => { if (!i) c.moveTo(X(x), Y(y)); else { c.lineTo(X(x), Y(s.pts[i - 1][1])); c.lineTo(X(x), Y(y)); } }); }
+        else s.pts.forEach(([x, y]) => { if (!Number.isFinite(y)) { pen = false; return; } if (pen) c.lineTo(X(x), Y(y)); else { c.moveTo(X(x), Y(y)); pen = true; } });
+        c.stroke(); c.setLineDash([]);
+        if (s.dots) { c.fillStyle = s.color; s.pts.forEach(([x, y]) => { c.beginPath(); c.arc(X(x), Y(y), 1.6, 0, Math.PI * 2); c.fill(); }); }
+      });
+      (o.markers || []).forEach((m) => { c.strokeStyle = m.color; c.setLineDash([3, 3]); c.beginPath(); c.moveTo(X(m.x), ptop); c.lineTo(X(m.x), h - pb); c.stroke(); c.setLineDash([]); if (m.label) { c.fillStyle = m.color; c.textAlign = 'left'; c.textBaseline = 'top'; c.fillText(m.label, X(m.x) + 3, ptop + 2); } });
+      c.restore();
+    }
+
+    // =========================== Pousse-seringue ===========================
+    const S = { syringe: 50, needle: 'G22', Q: 2, drive: 'stepper', pitch: 1, ratio: 10, micro: 16, slack: 0.1, alarmP: 500, occl: true, anti: true, bolus: false, drug: 'short' };
+    const logQ = { get: () => Math.log10(S.Q) };
+    let syrRes = null, syrAnim = 0;
+    function syrParams() { return { syringe: S.syringe, needle: S.needle, tubeL: 1.5, tubeD: 1.0, pitch: S.pitch, ratio: S.ratio, steps: 200, micro: S.micro, mu: 1e-3, friction: 8, Pv: 8 }; }
+    function renderSyrCtl() {
+      const box = $('ctlSyr'); box.innerHTML = ''; head(box, t('syrT'), true);
+      lab(box, t('syr')); segBtns(box, S, 'syringe', [[5, '5 mL'], [10, '10 mL'], [20, '20 mL'], [50, '50 mL']], () => { S.syringe = +S.syringe; runSyr(); });
+      lab(box, t('needle')); segBtns(box, S, 'needle', Object.keys(D.NEEDLES).map((k) => [k, k.replace('G', '') + ' G']), runSyr);
+      const q = { Qlog: Math.log10(S.Q) };
+      const row = document.createElement('div'); row.className = 'ctl';
+      row.innerHTML = '<label for="s-Q">' + t('Q') + '</label><output></output><input type="range" id="s-Q" min="-1" max="2.3" step="0.01">';
+      const r = row.querySelector('input'), o = row.querySelector('output'); r.value = Math.log10(S.Q);
+      const show = () => (o.textContent = fmt(S.Q, S.Q < 1 ? 2 : S.Q < 10 ? 1 : 0) + ' mL/h');
+      show(); r.addEventListener('input', () => { S.Q = +Math.pow(10, +r.value).toPrecision(2); show(); }); r.addEventListener('change', runSyr); box.appendChild(row);
+      lab(box, t('drive')); segBtns(box, S, 'drive', [['stepper', t('stepper')], ['dc', t('dc')]], runSyr);
+      head(box, t('mechT'));
+      slider(box, S, 'pitch', t('pitch'), 0.5, 2, 0.25, (v) => fmt(v, 2) + ' mm', runSyr);
+      slider(box, S, 'ratio', t('ratio'), 1, 50, 1, (v) => '1:' + v, runSyr);
+      slider(box, S, 'micro', t('micro'), 1, 32, 1, (v) => v, runSyr);
+      slider(box, S, 'slack', t('slack'), 0, 0.5, 0.01, (v) => fmt(v, 2) + ' mL', runSyr);
+      head(box, t('safeT'));
+      slider(box, S, 'alarmP', t('alarmP'), 100, 900, 50, (v) => v + ' mmHg', runSyr);
+      check(box, S, 'occl', t('occl'), runSyr); check(box, S, 'anti', t('anti'), runSyr); check(box, S, 'bolus', t('bolus'), runSyr);
+      head(box, t('drugT')); segBtns(box, S, 'drug', Object.entries(T[lang].drug), runSyr);
+    }
+    function runSyr() {
+      const p = syrParams(), ch = D.chain(p, S.Q), dr = S.drug === 'short' ? { c: 0.5, Vd: 20, half: 2 } : { c: 0.5, Vd: 20, half: 360 };
+      const sc = { Q: S.Q, tEnd: 7200, slack: S.slack, alarmP: S.alarmP, antiBolus: S.anti, drive: S.drive, drug: dr, filled: S.syringe, sample: 10, occlusion: S.occl ? { t: 1800, dur: 2400 } : null, bolus: S.bolus ? [{ t: 3600, V: 2, Q: 120 }] : [] };
+      const sim = D.simulateSyringe(p, sc);
+      // débit instantané sur 20 s (pas fin)
+      const pulse = D.simulateSyringe(p, { Q: S.Q, tEnd: 20, dt: 0.02, sample: 0.02, alarmP: 1e9, drive: S.drive, filled: S.syringe });
+      syrRes = { p, ch, sim, pulse, dr, sc };
+      const occ = sim.alarms.find((a) => a.type === 'occlusion'), anti = sim.alarms.find((a) => a.type === 'antibolus'), end = sim.alarms.find((a) => a.type === 'end');
+      const delay = D.occlusionDelay(S.syringe, S.alarmP, S.Q);
+      $('kpiSyr').innerHTML = kpi(t('kV'), fmt(ch.v * 1e6 * 60, 1), 'µm/min') + kpi(t('kRpm'), fmt(ch.motorRpm, 2), 'tr/min') + kpi(t('kStep'), fmt(ch.volPerStep, 4), 'µL/pas') + kpi(t('kF'), fmt(ch.force, 1), 'N') +
+        kpi(t('kAuto'), dur(ch.duration), '') + kpi(t('kOccl'), dur(delay), '', delay > 1800 ? 'bad' : 'main') + kpi(t('kBolus'), fmt(D.occlusionBolus(S.syringe, S.alarmP), 2), 'mL') + kpi(t('kDel'), fmt(sim.delivered, 2), 'mL');
+      const L = [];
+      if (S.slack > 0) { const tS = (S.slack / S.Q) * 3600; if (tS > 30) L.push(['warn', T[lang].iSlack(dur(tS))]); }
+      if (occ) L.push(['err', T[lang].iOccl(dur(occ.t - 1800))]);
+      else if (S.occl) L.push(['err', T[lang].iOccl('> ' + dur(7200 - 1800))]);
+      if (S.occl) L.push(anti ? ['warn', T[lang].iAnti(fmt(anti.V, 2))] : ['err', T[lang].iNoAnti(fmt(D.occlusionBolus(S.syringe, S.alarmP), 2))]);
+      if (end) L.push(['warn', T[lang].iEnd(dur(end.t))]);
+      if (S.drive === 'stepper' && ch.stepFreq < 20) L.push(['warn', t('iLow')]);
+      if (!L.length) L.push(['good', t('iOk')]);
+      issues($('issSyr'), L);
+      const tm = (s) => s / 60;
+      const cmd = sim.t.map((tt) => [tm(tt), S.bolus && tt >= 3600 && tt < 3600 + (2 / 120) * 3600 ? 120 : S.Q]);
+      plot($('chQ'), [{ pts: cmd, color: C.line, width: 1.2, dash: [4, 3] }, { pts: sim.t.map((tt, i) => [tm(tt), sim.Qout[i]]), color: C.accent }], { xmin: 0, xmax: 120, xfmt: (v) => fmt(v, 0) + ' min', ymin: 0, ymax: Math.max(S.Q * 1.6, S.bolus ? 125 : 0, ...sim.Qout.map((v) => Math.min(v, S.Q * 40))) * 1.05 });
+      plot($('chP'), [{ pts: sim.t.map((tt, i) => [tm(tt), sim.P[i]]), color: C.warn }], { xmin: 0, xmax: 120, xfmt: (v) => fmt(v, 0) + ' min', ymin: 0, ymax: Math.max(S.alarmP * 1.15, ...sim.P) , hlines: [{ y: S.alarmP, color: C.accent }] });
+      const cSS = (S.Q / 3600) * dr.c / dr.Vd / (Math.LN2 / (dr.half * 60)); // concentration d'équilibre
+      plot($('chC'), [{ pts: sim.t.map((tt, i) => [tm(tt), sim.C[i] * 1000]), color: C.accent }], { xmin: 0, xmax: 120, xfmt: (v) => fmt(v, 0) + ' min', ymin: 0, ymax: Math.max(cSS * 1.6, ...sim.C) * 1050 || 1, bands: dr.half < 10 ? [{ lo: cSS * 700, hi: cSS * 1300, color: 'rgba(46,74,46,0.45)' }] : [] });
+      plot($('chPulse'), [{ pts: pulse.t.map((tt, i) => [tt, pulse.Qout[i]]), color: C.accent, width: 1.2 }, { pts: [[0, S.Q], [20, S.Q]], color: C.line, dash: [4, 3], width: 1 }], { xmin: 0, xmax: 20, xfmt: (v) => fmt(v, 0) + ' s', ymin: 0 });
+    }
+    function drawSyr() {
+      if (!syrRes || document.getElementById('view-syr').hidden) return;
+      const cv = $('scSyr'), { c, w, h } = setupCanvas(cv), s = D.SYRINGES[S.syringe];
+      c.fillStyle = '#0a0a0b'; c.fillRect(0, 0, w, h);
+      syrAnim += 0.016;
+      const frac = (syrAnim * 60 % 100) / 100; // position fictive du chariot pour l'animation (accélérée)
+      const y0 = h * 0.5, x0 = 30, sw = Math.min(w * 0.5, 380), sh = 26 + S.syringe * 0.5;
+      // moteur
+      c.fillStyle = '#26262a'; c.fillRect(x0, y0 - 28, 44, 56); c.fillStyle = '#9b9b9f'; c.font = '10px "JetBrains Mono", monospace'; c.textAlign = 'center'; c.fillText('M', x0 + 22, y0 + 4);
+      // engrenages
+      const g = (cx, cy, r, n, a) => { c.strokeStyle = '#c9a45c'; c.lineWidth = 1.5; c.beginPath(); for (let k = 0; k < n * 2; k++) { const ang = a + (k * Math.PI) / n, rr = k % 2 ? r : r + 4; c.lineTo(cx + rr * Math.cos(ang), cy + rr * Math.sin(ang)); } c.closePath(); c.stroke(); };
+      const ang = syrAnim * 2;
+      g(x0 + 66, y0 - 12, 9, 10, ang); g(x0 + 66, y0 + 20, 20, 22, -ang / 2);
+      // vis
+      const vx0 = x0 + 92, vx1 = vx0 + sw * 0.9;
+      c.strokeStyle = '#6c6c70'; c.lineWidth = 6; c.beginPath(); c.moveTo(vx0, y0 + 20); c.lineTo(vx1, y0 + 20); c.stroke();
+      c.strokeStyle = '#3a3a3d'; c.lineWidth = 1; for (let x = vx0; x < vx1; x += 5) { c.beginPath(); c.moveTo(x + ((syrAnim * 20) % 5), y0 + 16); c.lineTo(x + 3 + ((syrAnim * 20) % 5), y0 + 24); c.stroke(); }
+      // chariot (écrou) et piston
+      const sx0 = vx0 + 40, sx1 = sx0 + sw * 0.75, plung = sx0 + (sx1 - sx0) * (0.15 + 0.6 * frac);
+      c.fillStyle = '#c8102e'; c.fillRect(plung - 12, y0 - 6, 14, 34);
+      // seringue
+      c.strokeStyle = '#c9c9cc'; c.lineWidth = 1.5; c.strokeRect(sx0, y0 - sh / 2 - 10, sx1 - sx0, sh);
+      c.fillStyle = 'rgba(224,164,88,0.35)'; c.fillRect(plung + 2, y0 - sh / 2 - 9, sx1 - plung - 3, sh - 2);
+      c.fillStyle = '#c9c9cc'; c.fillRect(plung, y0 - sh / 2 - 10, 3, sh);
+      c.strokeStyle = '#9b9b9f'; c.lineWidth = 2; c.beginPath(); c.moveTo(plung - 5, y0 - 10); c.lineTo(sx0 - 20, y0 - 10); c.stroke();
+      // ligne vers le patient
+      c.strokeStyle = '#e0a458'; c.lineWidth = 2; c.beginPath(); c.moveTo(sx1, y0 - 10); c.bezierCurveTo(sx1 + 60, y0 - 10, w - 90, y0 + 60, w - 60, y0 + 40); c.stroke();
+      c.fillStyle = '#9b9b9f'; c.textAlign = 'center'; c.fillText(lang === 'fr' ? 'patient' : 'patient', w - 50, y0 + 62);
+      c.strokeStyle = '#c9c9cc'; c.beginPath(); c.arc(w - 50, y0 + 40, 16, 0, Math.PI * 2); c.stroke();
+      // texte
+      const ch = syrRes.ch;
+      c.textAlign = 'left'; c.fillStyle = '#9b9b9f';
+      c.fillText(S.syringe + ' mL · Ø ' + fmt(s.d, 1) + ' mm · ' + fmt(S.Q, 2) + ' mL/h', sx0, y0 - sh / 2 - 22);
+      c.fillText((lang === 'fr' ? 'moteur ' : 'motor ') + fmt(ch.motorRpm, 2) + ' tr/min · ' + fmt(ch.stepFreq, 1) + (lang === 'fr' ? ' pas/s' : ' steps/s'), x0, y0 + 58);
+      c.fillText((lang === 'fr' ? 'vis ' : 'screw ') + fmt(S.pitch, 2) + ' mm/tr · 1:' + S.ratio, vx0, y0 + 44);
+      c.fillStyle = '#4a4a4e'; c.fillText(lang === 'fr' ? '(animation accélérée)' : '(sped-up animation)', 8, h - 8);
+    }
+
+    // =========================== Pompe à insuline ===========================
+    const I = { mode: 'hybrid', sc: 'forgot', target: 120, Kp: 0.045, Ki: 0.00005, Kd: 1.5 };
+    const SCEN = {
+      normal: { meals: [{ t: 420, g: 50 }, { t: 720, g: 70 }, { t: 1170, g: 80 }] },
+      forgot: { meals: [{ t: 420, g: 50 }, { t: 720, g: 70, noBolus: true }, { t: 1170, g: 80 }] },
+      late: { meals: [{ t: 420, g: 50 }, { t: 720, g: 70, late: 45 }, { t: 1170, g: 80 }] },
+      snack: { meals: [{ t: 420, g: 50 }, { t: 720, g: 70 }, { t: 960, g: 30, unannounced: true, noBolus: true }, { t: 1170, g: 80 }] },
+      sport: { meals: [{ t: 420, g: 50 }, { t: 720, g: 70 }, { t: 1170, g: 80 }], sensitivity: 1.3 },
+      sick: { meals: [{ t: 420, g: 50 }, { t: 720, g: 70 }, { t: 1170, g: 80 }], sensitivity: 0.7 },
+    };
+    function renderInsCtl() {
+      const box = $('ctlIns'); box.innerHTML = ''; head(box, t('insT'), true);
+      segBtns(box, I, 'mode', Object.entries(T[lang].mode), runIns);
+      head(box, t('scT')); segBtns(box, I, 'sc', Object.entries(T[lang].sc), runIns);
+      head(box, t('advT'));
+      slider(box, I, 'target', t('target'), 100, 150, 5, (v) => v + ' mg/dL', runIns);
+      slider(box, I, 'Kp', t('kp'), 0, 0.1, 0.005, (v) => fmt(v, 3), runIns);
+      slider(box, I, 'Ki', t('ki'), 0, 0.0003, 0.00001, (v) => fmt(v * 1e5, 1) + '·10⁻⁵', runIns);
+      slider(box, I, 'Kd', t('kd'), 0, 4, 0.1, (v) => fmt(v, 1), runIns);
+    }
+    function insRun(mode) { const sc = SCEN[I.sc]; return D.simulateInsulin({ mode, days: 1, meals: sc.meals.map((m) => Object.assign({}, m)), sensitivity: sc.sensitivity, target: I.target, Kp: I.Kp, Ki: I.Ki, Kd: I.Kd }); }
+    function runIns() {
+      const r = insRun(I.mode), m = r.metrics;
+      $('kpiIns').innerHTML = kpi(t('kTir'), fmt(m.tir, 0), '%', m.tir >= 70 ? 'good' : 'bad') + kpi(t('kLow'), fmt(m.low, 1), '%', m.low > 4 ? 'bad' : '') + kpi(t('kHigh'), fmt(m.high, 0), '%') + kpi(t('kMean'), fmt(m.mean, 0), 'mg/dL') +
+        kpi('Min / max', fmt(m.min, 0) + ' / ' + fmt(m.max, 0), 'mg/dL') + kpi(t('kTot'), fmt(m.totalU, 1), 'U');
+      plot($('chG'), [{ pts: r.t.map((x, i) => [x / 60, r.G[i]]), color: C.accent, width: 2 }, { pts: r.t.map((x, i) => [x / 60, r.Gs[i]]), color: C.line, width: 0.01, dots: true }], {
+        xmin: 0, xmax: 24, xstep: 3, xfmt: (v) => v + 'h', ymin: 40, ymax: Math.max(320, m.max + 10), bands: [{ lo: 70, hi: 180, color: 'rgba(46,74,46,0.35)' }], hlines: [{ y: 70, color: '#8a4040' }],
+        markers: r.meals.map((x) => ({ x: x.t / 60, color: C.warn, label: x.g + ' g' })),
+      });
+      plot($('chU'), [{ pts: r.t.map((x, i) => [x / 60, r.u[i]]), color: C.warn, width: 1.2, steps: true }], { xmin: 0, xmax: 24, xstep: 3, xfmt: (v) => v + 'h', ymin: 0, ymax: Math.max(4, Math.min(80, Math.max(...r.u))) });
+      const L = [];
+      if (m.low > 0) L.push(['err', t('iHypo')]);
+      if (m.veryHigh > 5) L.push(['warn', t('iHigh')]);
+      if (I.sc === 'sport' && I.mode !== 'manual') L.push(['warn', t('iSport')]);
+      if (!L.length && m.tir >= 70) L.push(['good', t('iGoodI')]);
+      issues($('issIns'), L);
+      const H = t('cmpHead');
+      let h = '<thead><tr>' + H.map((c, i) => '<th' + (i ? ' class="n"' : '') + '>' + c + '</th>').join('') + '</tr></thead><tbody>';
+      ['manual', 'hybrid', 'closed'].forEach((md) => { const x = md === I.mode ? r : insRun(md), q = x.metrics; h += '<tr' + (md === I.mode ? ' class="sel"' : '') + '><td>' + T[lang].mode[md] + '</td><td class="n">' + fmt(q.tir, 0) + ' %</td><td class="n">' + fmt(q.low, 1) + ' %</td><td class="n">' + fmt(q.high, 0) + ' %</td><td class="n">' + fmt(q.min, 0) + '</td><td class="n">' + fmt(q.max, 0) + '</td><td class="n">' + fmt(q.totalU, 1) + ' U</td></tr>'; });
+      $('cmpIns').innerHTML = h + '</tbody>';
+    }
+
+    // =========================== Hémomixeur ===========================
+    const H = { target: 450, method: 'angle', amp: 15, freq: 0.5, Pv: 50, h: 0.5, clamp: 0.3 };
+    let hemo = null, hemoAll = null, hemoT0 = null, hemoRaf = null;
+    const hemoP = (m) => ({ Pv: H.Pv, h: H.h, tubeL: 1.2, tubeD: 3, mu: 3.8e-3, target: H.target, amp: H.amp, freq: H.freq, arm: 0.06, clampDelay: H.clamp, noise: 0.5, method: m || H.method });
+    function renderHemoCtl() {
+      const box = $('ctlHemo'); box.innerHTML = ''; head(box, t('hemoT'), true);
+      lab(box, t('targetV')); segBtns(box, H, 'target', [[400, '400 mL'], [450, '450 mL'], [500, '500 mL']], () => { H.target = +H.target; runHemo(); });
+      lab(box, t('method')); segBtns(box, H, 'method', Object.entries(T[lang].meth), runHemo);
+      head(box, t('rockT'));
+      slider(box, H, 'amp', t('amp'), 0, 25, 1, (v) => '± ' + v + '°', runHemo);
+      slider(box, H, 'freq', t('freq'), 0.2, 1.2, 0.05, (v) => fmt(v, 2) + ' Hz', runHemo);
+      head(box, t('donorT'));
+      slider(box, H, 'Pv', t('Pv'), 20, 70, 5, (v) => v + ' mmHg', runHemo);
+      slider(box, H, 'h', t('h'), 0.1, 0.9, 0.05, (v) => fmt(v * 100, 0) + ' cm', runHemo);
+      slider(box, H, 'clamp', t('clamp'), 0, 2, 0.1, (v) => fmt(v, 1) + ' s', runHemo);
+    }
+    function runHemo() {
+      hemo = D.simulateDonation(hemoP());
+      hemoAll = Object.keys(T.fr.meth).map((k) => [k, k === H.method ? hemo : D.simulateDonation(hemoP(k))]);
+      const err = hemo.V - H.target;
+      const meanQ = hemo.duration ? hemo.V / (hemo.duration / 60) : 0;
+      $('kpiHemo').innerHTML = kpi(t('kVol'), fmt(hemo.V, 1), 'mL', 'main') + kpi(t('kErr'), (err > 0 ? '+' : '') + fmt(err, 1), 'mL', Math.abs(err) > H.target * 0.1 ? 'bad' : Math.abs(err) < 3 ? 'good' : '') +
+        kpi(t('kDur'), hemo.duration ? fmt(hemo.duration / 60, 1) : '—', 'min', hemo.duration > 900 ? 'bad' : '') + kpi(t('kRatio'), fmt(hemo.ratio, 1), '%');
+      const L = [];
+      if (hemo.alarms.some((a) => a.type === 'lowflow')) L.push(['err', t('iLowF')]);
+      if (hemo.alarms.some((a) => a.type === 'long')) L.push(['err', t('iLong')]);
+      if (Math.abs(err) > H.target * 0.1) L.push(['err', t('iOut')]);
+      if (H.method === 'raw' && H.amp > 3) L.push(['warn', t('iRaw')]);
+      if (H.method === 'avg' && H.amp > 3) L.push(['warn', t('iAvg')]);
+      if (!L.length) L.push(['good', t('iGoodH')]);
+      issues($('issHemo'), L);
+      const n = hemo.t.length, end = hemo.t[n - 1], from = hemo.t.findIndex((x) => x >= end - 30);
+      const sl = (arr) => arr.slice(from).map((v, i) => [hemo.t[from + i], v]);
+      plot($('chM'), [{ pts: sl(hemo.raw), color: C.grey, width: 1 }, { pts: sl(hemo.truth), color: C.line, width: 1.4, dash: [4, 3] }, { pts: sl(hemo.est), color: C.accent, width: 1.8 }], { xmin: end - 30, xmax: end, xstep: 5, xfmt: (v) => Math.floor(v / 60) + ':' + String(Math.round(v % 60)).padStart(2, '0'), hlines: [{ y: hemo.targetMass, color: '#8a8a90' }] });
+      plot($('chFlow'), [{ pts: hemo.t.filter((_, i) => i % 20 === 0).map((x, i) => [x / 60, hemo.Q[i * 20]]), color: C.warn }], { xmin: 0, xmax: Math.max(1, end / 60), xfmt: (v) => fmt(v, 0) + ' min', ymin: 0, hlines: [{ y: 20, color: C.accent }] });
+      const hh = t('hcmpHead');
+      let tb = '<thead><tr>' + hh.map((c, i) => '<th' + (i ? ' class="n"' : '') + '>' + c + '</th>').join('') + '</tr></thead><tbody>';
+      hemoAll.forEach(([k, r]) => { const e = r.V - H.target; tb += '<tr' + (k === H.method ? ' class="sel"' : '') + '><td>' + T[lang].meth[k] + '</td><td class="n">' + fmt(r.V, 1) + ' mL</td><td class="n">' + (e > 0 ? '+' : '') + fmt(e, 1) + ' mL</td><td class="n">' + (r.duration ? fmt(r.duration / 60, 1) + ' min' : '—') + '</td></tr>'; });
+      $('cmpHemo').innerHTML = tb + '</tbody>';
+      replayHemo();
+    }
+    function replayHemo() { if (hemoRaf) cancelAnimationFrame(hemoRaf); hemoT0 = null; const tick = (ts) => { if (hemoT0 === null) hemoT0 = ts; drawHemo((ts - hemoT0) / 1000); hemoRaf = requestAnimationFrame(tick); }; hemoRaf = requestAnimationFrame(tick); }
+    function drawHemo(real) {
+      if (!hemo || document.getElementById('view-hemo').hidden) return;
+      const total = hemo.t[hemo.t.length - 1], speed = total / 12; // le don entier en 12 s
+      const tt = Math.min(total, real * speed);
+      const i = Math.min(hemo.t.length - 1, Math.round(tt / 0.1));
+      const cv = $('scHemo'), { c, w, h } = setupCanvas(cv);
+      c.fillStyle = '#0a0a0b'; c.fillRect(0, 0, w, h);
+      // l'angle affiché oscille au vrai rythme du plateau (pas accéléré), pour rester lisible
+      const th = ((H.amp * Math.PI) / 180) * Math.sin(2 * Math.PI * H.freq * real);
+      const cx = w * 0.55, cy = h * 0.66;
+      // bras du donneur
+      c.fillStyle = '#26262a'; c.fillRect(20, 30, w * 0.22, 26); c.fillStyle = '#9b9b9f'; c.font = '10px "JetBrains Mono", monospace'; c.textAlign = 'left'; c.fillText(lang === 'fr' ? 'bras du donneur' : "donor's arm", 24, 24);
+      // tubulure et pince
+      const closed = hemo.duration && tt >= hemo.duration;
+      c.strokeStyle = '#c8102e'; c.lineWidth = 3; c.beginPath(); c.moveTo(20 + w * 0.22, 43); c.bezierCurveTo(w * 0.4, 43, cx - 40, cy - 90, cx - 10, cy - 46); c.stroke();
+      const px = w * 0.36, py = 60;
+      c.fillStyle = closed ? '#c8102e' : '#3a3a3d'; c.fillRect(px - 10, py - 4, 20, 16);
+      c.fillStyle = '#9b9b9f'; c.fillText((lang === 'fr' ? 'pince ' : 'clamp ') + (closed ? (lang === 'fr' ? 'fermée' : 'closed') : (lang === 'fr' ? 'ouverte' : 'open')), px - 30, py + 28);
+      // plateau basculant et poche
+      c.save(); c.translate(cx, cy); c.rotate(-th);
+      c.fillStyle = '#3a3a3d'; c.fillRect(-110, 6, 220, 8);
+      const V = Math.min(hemo.V, Math.max(0, (hemo.truth[i] - D.BAG.tare - D.BAG.anticoag * D.BAG.acDensity) / D.BLOOD));
+      const fill = Math.min(1, V / 520), bh = 22 + 34 * fill;
+      c.fillStyle = 'rgba(200,16,46,' + (0.25 + 0.6 * fill) + ')'; c.strokeStyle = '#c9c9cc'; c.lineWidth = 1.5;
+      c.beginPath(); c.ellipse(0, 6 - bh / 2, 80, bh / 2, 0, 0, Math.PI * 2); c.fill(); c.stroke();
+      c.restore();
+      // axe et cellule de pesée
+      c.fillStyle = '#c9c9cc'; c.beginPath(); c.arc(cx, cy + 10, 5, 0, Math.PI * 2); c.fill();
+      c.fillStyle = '#26262a'; c.fillRect(cx - 30, cy + 22, 60, 16); c.fillStyle = '#9b9b9f'; c.textAlign = 'center'; c.fillText(lang === 'fr' ? 'cellule de pesée' : 'load cell', cx, cy + 52);
+      // affichage
+      c.textAlign = 'left'; c.fillStyle = '#f2f2f2'; c.font = '600 13px Inter, sans-serif';
+      c.fillText(fmt(V, 0) + ' / ' + H.target + ' mL', w - 150, 40);
+      c.font = '10px "JetBrains Mono", monospace'; c.fillStyle = '#9b9b9f';
+      c.fillText((lang === 'fr' ? 'estimé ' : 'estimated ') + fmt((hemo.est[i] - D.BAG.tare - D.BAG.anticoag * D.BAG.acDensity) / D.BLOOD, 0) + ' mL', w - 150, 58);
+      c.fillText(fmt(hemo.Q[i], 0) + ' mL/min', w - 150, 74);
+      $('hemoT').textContent = 't = ' + fmt(tt / 60, 2) + ' min (×' + fmt(speed, 0) + ')';
+    }
+    $('playHemo').addEventListener('click', replayHemo);
+
+    // ---------- Onglets, langue, animation ----------
+    function setView(v) {
+      document.querySelectorAll('.tab').forEach((b) => b.setAttribute('aria-selected', b.dataset.view === v));
+      document.querySelectorAll('.view').forEach((s) => (s.hidden = s.id !== 'view-' + v));
+      if (v === 'syr') runSyr(); else if (v === 'ins') runIns(); else runHemo();
+      try { history.replaceState(null, '', '#' + v); } catch (e) {}
+    }
+    document.querySelectorAll('.tab').forEach((b) => b.addEventListener('click', () => setView(b.dataset.view)));
+    function setLang(l) {
+      lang = l; document.documentElement.lang = l;
+      document.querySelectorAll('[data-t]').forEach((el) => { const v = T[l][el.dataset.t]; if (typeof v === 'string') el.textContent = v; });
+      document.querySelectorAll('.lang button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.lang === l));
+      try { localStorage.setItem('lang', l); } catch (e) {}
+      renderSyrCtl(); renderInsCtl(); renderHemoCtl();
+      const cur = document.querySelector('.tab[aria-selected="true"]').dataset.view; setView(cur);
+    }
+    document.querySelectorAll('.lang button').forEach((b) => b.addEventListener('click', () => setLang(b.dataset.lang)));
+    const h0 = (location.hash || '').slice(1);
+    if (['syr', 'ins', 'hemo'].includes(h0)) document.querySelectorAll('.tab').forEach((b) => b.setAttribute('aria-selected', b.dataset.view === h0));
+    setLang(lang);
+    const loop = () => { drawSyr(); requestAnimationFrame(loop); };
+    requestAnimationFrame(loop);
+  })();
+  </script>
+</body>
+</html>
